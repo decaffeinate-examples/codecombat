@@ -1,136 +1,184 @@
-require('app/styles/play/modal/poll-modal.sass')
-ModalView = require 'views/core/ModalView'
-template = require 'templates/play/modal/poll-modal'
-utils = require 'core/utils'
-UserPollsRecord = require 'models/UserPollsRecord'
+/*
+ * decaffeinate suggestions:
+ * DS101: Remove unnecessary use of Array.from
+ * DS102: Remove unnecessary code created because of implicit returns
+ * DS103: Rewrite code to no longer use __guard__
+ * DS104: Avoid inline assignments
+ * DS206: Consider reworking classes to avoid initClass
+ * DS207: Consider shorter variations of null checks
+ * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
+ */
+let PollModal;
+require('app/styles/play/modal/poll-modal.sass');
+const ModalView = require('views/core/ModalView');
+const template = require('templates/play/modal/poll-modal');
+const utils = require('core/utils');
+const UserPollsRecord = require('models/UserPollsRecord');
 
-module.exports = class PollModal extends ModalView
-  id: 'poll-modal'
-  template: template
+module.exports = (PollModal = (function() {
+  PollModal = class PollModal extends ModalView {
+    static initClass() {
+      this.prototype.id = 'poll-modal';
+      this.prototype.template = template;
+  
+      this.prototype.subscriptions = {};
+  
+      this.prototype.events = {
+        'click #close-modal': 'hide',
+        'click .answer:not(.selected)': 'onClickAnswer'
+      };
+    }
 
-  subscriptions: {}
+    constructor(options) {
+      let left, left1;
+      super(options);
+      this.poll = options.poll;
+      this.userPollsRecord = options.userPollsRecord;
+      this.previousAnswer = ((left = this.userPollsRecord.get('polls')) != null ? left : {})[this.poll.id];
+      this.previousReward = ((left1 = this.userPollsRecord.get('rewards')) != null ? left1 : {})[this.poll.id];
+    }
 
-  events:
-    'click #close-modal': 'hide'
-    'click .answer:not(.selected)': 'onClickAnswer'
+    getRenderData(c) {
+      c = super.getRenderData(c);
+      c.poll = this.poll;
+      c.i18n = utils.i18n;
+      c.marked = marked;
+      return c;
+    }
 
-  constructor: (options) ->
-    super options
-    @poll = options.poll
-    @userPollsRecord = options.userPollsRecord
-    @previousAnswer = (@userPollsRecord.get('polls') ? {})[@poll.id]
-    @previousReward = (@userPollsRecord.get('rewards') ? {})[@poll.id]
+    afterRender() {
+      super.afterRender();
+      this.playSound('game-menu-open');
+      return this.updateAnswers();
+    }
 
-  getRenderData: (c) ->
-    c = super c
-    c.poll = @poll
-    c.i18n = utils.i18n
-    c.marked = marked
-    c
+    onHidden() {
+      super.onHidden();
+      return this.playSound('game-menu-close');
+    }
 
-  afterRender: ->
-    super()
-    @playSound 'game-menu-open'
-    @updateAnswers()
+    updateAnswers(answered) {
+      let answer, left, votes;
+      const myAnswer = ((left = this.userPollsRecord.get('polls')) != null ? left : {})[this.poll.id];
+      answered = (myAnswer != null);
+      this.$el.find('table, .random-gems-container-wrapper').toggleClass('answered', answered);
+      if (!answered) { return; }
+      this.awardRandomGems();
 
-  onHidden: ->
-    super()
-    @playSound 'game-menu-close'
+      // Count total votes and find the answer with the most votes.
+      let [maxVotes, totalVotes] = Array.from([0, 0]);
+      for (answer of Array.from(this.poll.get('answers') || [])) {
+        votes = answer.votes || 0;
+        if (answer.key === this.previousAnswer) { --votes; }
+        if (answer.key === myAnswer) { ++votes; }
+        answer.votes = votes;
+        totalVotes += votes;
+        maxVotes = Math.max(maxVotes, votes || 0);
+      }
+      this.previousAnswer = myAnswer;
+      this.poll.set('answers', this.poll.get('answers'));  // Update vote count locally (won't save to server).
 
-  updateAnswers: (answered) ->
-    myAnswer = (@userPollsRecord.get('polls') ? {})[@poll.id]
-    answered = myAnswer?
-    @$el.find('table, .random-gems-container-wrapper').toggleClass 'answered', answered
-    return unless answered
-    @awardRandomGems()
+      // Update each answer cell according to its share of max and total votes.
+      for (answer of Array.from(this.poll.get('answers'))) {
+        const $answer = this.$el.find(`.answer[data-answer='${answer.key}']`);
+        $answer.toggleClass('selected', answer.key === myAnswer);
+        votes = answer.votes || 0;
+        if (!totalVotes) { votes = (maxVotes = (totalVotes = 1)); }  // If no votes yet, just pretend we voted for the first one.
 
-    # Count total votes and find the answer with the most votes.
-    [maxVotes, totalVotes] = [0, 0]
-    for answer in @poll.get('answers') or []
-      votes = answer.votes or 0
-      --votes if answer.key is @previousAnswer
-      ++votes if answer.key is myAnswer
-      answer.votes = votes
-      totalVotes += votes
-      maxVotes = Math.max maxVotes, votes or 0
-    @previousAnswer = myAnswer
-    @poll.set 'answers', @poll.get('answers')  # Update vote count locally (won't save to server).
+        const widthPercentage = ((100 * votes) / maxVotes) + '%';
+        const votePercentage = Math.round((100 * votes) / totalVotes) + '%';
+        $answer.find('.progress-bar').css('width', '0%').animate({width: widthPercentage}, 'slow');
+        $answer.find('.vote-percentage').text(votePercentage);
+        if (me.isAdmin()) { $answer.find('.vote-count').text(votes); }
+      }
 
-    # Update each answer cell according to its share of max and total votes.
-    for answer in @poll.get 'answers'
-      $answer = @$el.find(".answer[data-answer='#{answer.key}']")
-      $answer.toggleClass 'selected', answer.key is myAnswer
-      votes = answer.votes or 0
-      votes = maxVotes = totalVotes = 1 unless totalVotes  # If no votes yet, just pretend we voted for the first one.
+      return this.trigger('vote-updated');
+    }
 
-      widthPercentage = (100 * votes / maxVotes) + '%'
-      votePercentage = Math.round(100 * votes / totalVotes) + '%'
-      $answer.find('.progress-bar').css('width', '0%').animate({width: widthPercentage}, 'slow')
-      $answer.find('.vote-percentage').text votePercentage
-      $answer.find('.vote-count').text votes if me.isAdmin()
+    onClickAnswer(e) {
+      let left;
+      const $selectedAnswer = $(e.target).closest('.answer');
+      const pollVotes = (left = this.userPollsRecord.get('polls')) != null ? left : {};
+      pollVotes[this.poll.id] = $selectedAnswer.data('answer').toString();
+      this.userPollsRecord.set('polls', pollVotes);
+      this.updateAnswers(true);
+      return this.userPollsRecord.save({polls: pollVotes}, {success: () => (typeof this.awardRandomGems === 'function' ? this.awardRandomGems() : undefined)});
+    }
 
-    @trigger 'vote-updated'
+    awardRandomGems() {
+      let left, left1, reward;
+      if (!(reward = ((left = this.userPollsRecord.get('rewards')) != null ? left : {})[this.poll.id])) { return; }
+      this.$randomNumber = this.$el.find('#random-number-comment').empty();
+      this.$randomGems = this.$el.find('#random-gems-comment').hide();
+      this.$totalGems = this.$el.find('#total-gems-comment').hide();
+      const commentStart = commentStarts[(left1 = __guard__(me.get('aceConfig'), x => x.language)) != null ? left1 : 'python'];
+      const randomNumber = reward.random;
+      const randomGems = Math.ceil(2 * randomNumber * reward.level);
+      const totalGems = this.previousReward ? me.gems() : Math.round(me.gems() + randomGems);
+      const {
+        playSound
+      } = this;
 
-  onClickAnswer: (e) ->
-    $selectedAnswer = $(e.target).closest('.answer')
-    pollVotes = @userPollsRecord.get('polls') ? {}
-    pollVotes[@poll.id] = $selectedAnswer.data('answer').toString()
-    @userPollsRecord.set 'polls', pollVotes
-    @updateAnswers true
-    @userPollsRecord.save {polls: pollVotes}, {success: => @awardRandomGems?()}
+      if (this.previousReward) {
+        utils.replaceText(this.$randomNumber.show(), commentStart + randomNumber.toFixed(7));
+        utils.replaceText(this.$randomGems.show(), commentStart + randomGems);
+        return utils.replaceText(this.$totalGems.show(), commentStart + totalGems);
+      } else {
+        let gemNoisesPlayed = 0;
+        for (let i = 0; i <= 1000; i += 25) {
+          (i => {
+            this.$randomNumber.queue(function() {
+              const number = i === 1000 ? randomNumber : Math.random();
+              utils.replaceText($(this), commentStart + number.toFixed(7));
+              $(this).dequeue();
+              if (Math.random() < (randomGems / 40)) {
+                const gemTrigger = 'gem-' + (gemNoisesPlayed % 4);  // 4 gem sounds
+                ++gemNoisesPlayed;
+                return playSound(gemTrigger, (0.475 + (i / 2000)));
+              }
+            });
+            return this.$randomNumber.delay(25);
+          })(i);
+        }
+        this.$randomGems.delay(1100).queue(function() {
+          utils.replaceText($(this), commentStart + randomGems);
+          $(this).show();
+          return $(this).dequeue();
+        });
+        this.$totalGems.delay(1200).queue(function() {
+          utils.replaceText($(this), commentStart + totalGems);
+          $(this).show();
+          return $(this).dequeue();
+        });
 
-  awardRandomGems: ->
-    return unless reward = (@userPollsRecord.get('rewards') ? {})[@poll.id]
-    @$randomNumber = @$el.find('#random-number-comment').empty()
-    @$randomGems = @$el.find('#random-gems-comment').hide()
-    @$totalGems = @$el.find('#total-gems-comment').hide()
-    commentStart = commentStarts[me.get('aceConfig')?.language ? 'python']
-    randomNumber = reward.random
-    randomGems = Math.ceil 2 * randomNumber * reward.level
-    totalGems = if @previousReward then me.gems() else Math.round me.gems() + randomGems
-    playSound = @playSound
-
-    if @previousReward
-      utils.replaceText @$randomNumber.show(), commentStart + randomNumber.toFixed(7)
-      utils.replaceText @$randomGems.show(), commentStart + randomGems
-      utils.replaceText @$totalGems.show(), commentStart + totalGems
-    else
-      gemNoisesPlayed = 0
-      for i in [0 .. 1000] by 25
-        do (i) =>
-          @$randomNumber.queue ->
-            number = if i is 1000 then randomNumber else Math.random()
-            utils.replaceText $(@), commentStart + number.toFixed(7)
-            $(@).dequeue()
-            if Math.random() < randomGems / 40
-              gemTrigger = 'gem-' + (gemNoisesPlayed % 4)  # 4 gem sounds
-              ++gemNoisesPlayed
-              playSound gemTrigger, (0.475 + i / 2000)
-          @$randomNumber.delay 25
-      @$randomGems.delay(1100).queue ->
-        utils.replaceText $(@), commentStart + randomGems
-        $(@).show()
-        $(@).dequeue()
-      @$totalGems.delay(1200).queue ->
-        utils.replaceText $(@), commentStart + totalGems
-        $(@).show()
-        $(@).dequeue()
-
-      @previousReward = reward
-      _.delay (=>
-        return if @destroyed
-        earned = me.get('earned') ? {}
-        earned.gems ?= 0
-        earned.gems += randomGems
-        me.set 'earned', earned
-        me.trigger 'change:earned', me, earned
-      ), 1200
+        this.previousReward = reward;
+        return _.delay((() => {
+          let left2;
+          if (this.destroyed) { return; }
+          const earned = (left2 = me.get('earned')) != null ? left2 : {};
+          if (earned.gems == null) { earned.gems = 0; }
+          earned.gems += randomGems;
+          me.set('earned', earned);
+          return me.trigger('change:earned', me, earned);
+        }
+        ), 1200);
+      }
+    }
+  };
+  PollModal.initClass();
+  return PollModal;
+})());
 
 
-commentStarts =
-  javascript: '// '
-  python: '# '
-  coffeescript: '# '
-  lua: '-- '
-  java: '// '
+var commentStarts = {
+  javascript: '// ',
+  python: '# ',
+  coffeescript: '# ',
+  lua: '-- ',
+  java: '// ',
   cpp: '// '
+};
+
+function __guard__(value, transform) {
+  return (typeof value !== 'undefined' && value !== null) ? transform(value) : undefined;
+}

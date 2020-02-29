@@ -1,283 +1,408 @@
-require('ozaria/site/styles/play/level/tome/spell-palette-view.sass')
-CocoView = require 'views/core/CocoView'
-{me} = require 'core/auth'
-SpellPaletteEntryView = require './SpellPaletteEntryView'
-SpellPaletteThangEntryView = require './SpellPaletteThangEntryView'
-LevelComponent = require 'models/LevelComponent'
-ThangType = require 'models/ThangType'
-ace = require('lib/aceContainer')
-aceUtils = require 'core/aceUtils'
+/*
+ * decaffeinate suggestions:
+ * DS001: Remove Babel/TypeScript constructor workaround
+ * DS101: Remove unnecessary use of Array.from
+ * DS102: Remove unnecessary code created because of implicit returns
+ * DS104: Avoid inline assignments
+ * DS204: Change includes calls to have a more natural evaluation order
+ * DS205: Consider reworking code to avoid use of IIFEs
+ * DS206: Consider reworking classes to avoid initClass
+ * DS207: Consider shorter variations of null checks
+ * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
+ */
+let SpellPaletteView;
+require('ozaria/site/styles/play/level/tome/spell-palette-view.sass');
+const CocoView = require('views/core/CocoView');
+const {me} = require('core/auth');
+const SpellPaletteEntryView = require('./SpellPaletteEntryView');
+const SpellPaletteThangEntryView = require('./SpellPaletteThangEntryView');
+const LevelComponent = require('models/LevelComponent');
+const ThangType = require('models/ThangType');
+const ace = require('lib/aceContainer');
+const aceUtils = require('core/aceUtils');
 
-module.exports = class SpellPaletteView extends CocoView
-  id: 'spell-palette-view'
-  template: require 'ozaria/site/templates/play/level/tome/spell-palette-view'
-  controlsEnabled: true
+module.exports = (SpellPaletteView = (function() {
+  SpellPaletteView = class SpellPaletteView extends CocoView {
+    constructor(...args) {
+      {
+        // Hack: trick Babel/TypeScript into allowing this before super.
+        if (false) { super(); }
+        let thisFn = (() => { return this; }).toString();
+        let thisName = thisFn.match(/return (?:_assertThisInitialized\()*(\w+)\)*;/)[1];
+        eval(`${thisName} = this;`);
+      }
+      this.onResize = this.onResize.bind(this);
+      this.closeRightPanel = this.closeRightPanel.bind(this);
+      this.closeCommandBank = this.closeCommandBank.bind(this);
+      super(...args);
+    }
 
-  subscriptions:
-    'level:disable-controls': 'onDisableControls'
-    'level:enable-controls': 'onEnableControls'
-    'surface:frame-changed': 'onFrameChanged'
-    'tome:change-language': 'onTomeChangedLanguage'
-    'tome:palette-clicked': 'onPalleteClick'
-    'surface:stage-mouse-down': 'closeCommandBank'
-
-
-  events:
-    'click .command-bank-header': 'onClickHeader'
-    'click .closeBtn': 'onClickClose'
-    'click .sub-section-header': 'onSubSectionHeaderClick'
-    'click': 'onClick'
-
-  initialize: (options) ->
-    {@level, @session, @thang, @useHero} = options
-    @aceEditors = []
-    @createPalette()
-    $(window).on 'resize', @onResize
-
-  getRenderData: ->
-    c = super()
-    c.entryGroups = @entryGroups
-    c._ = _
-    c
-
-  afterRender: ->
-    super()
-    for group, entries of @entryGroups
-      group = _.string.slugify(group)
-      itemGroup = $('<div class="property-entry-item-group"></div>').appendTo @$el.find('.properties-'+group)
-      entrySubGroups = _.groupBy entries, (entry) -> entry.doc.subSection || 'none'
-      for subGroup, entries of entrySubGroups
-        if subGroup != 'none'
-          header = $("<div class='sub-section-header' data-panel='#sub-section-#{subGroup}-#{group}'>
-              <span>#{subGroup}</span>
-              <div style='float: right; padding-top: 3px;' class='glyphicon glyphicon-chevron-down blue-glyphicon'></div>
-            </a>").appendTo itemGroup
-          itemSubGroup = $("<div class='property-entry-item-sub-group collapse' id='sub-section-#{subGroup}-#{group}'></div>").appendTo itemGroup
-        for entry, entryIndex in entries
-          if subGroup != 'none'
-            itemSubGroup.append entry.el
-          else
-            itemGroup.append entry.el
-          entry.render()  # Render after appending so that we can access parent container for popover
-      @$el.addClass 'hero'
-      @$el.toggleClass 'shortenize', Boolean true
-
-  afterInsert: ->
-    super()
-    _.delay => @$el?.css('bottom', 0) unless $('#spell-view').is('.shown')
-
-  updateCodeLanguage: (language) ->
-    @options.language = language
-
-  onResize: (e) =>
-    @updateMaxHeight?()
-
-  createPalette: ->
-    Backbone.Mediator.publish 'tome:palette-cleared', {thangID: @thang.id}
-    lcs = @supermodel.getModels LevelComponent
-
-    allDocs = {}
-    excludedDocs = {}
-    for lc in lcs
-      for doc in (lc.get('propertyDocumentation') ? [])
-        if doc.codeLanguages and not (@options.language in doc.codeLanguages)
-          excludedDocs['__' + doc.name] = doc
-          continue
-        allDocs['__' + doc.name] ?= []
-        allDocs['__' + doc.name].push doc
-        if doc.type is 'snippet' then doc.owner = 'snippets'
-        doc.componentName = lc.get('name')
-
-    methodsBankList = @options.level.get('methodsBankList') || []
-    
-    if methodsBankList.length == 0
-      console.log("Methods Bank list is empty!!")
-    else
-      @organizePaletteHero methodsBankList, allDocs, excludedDocs
-    @publishAutoCompleteEvent(allDocs)
-
-  # Reads the methods bank list and find its documentation from allDocs(i.e. docs coming from level components)
-  # This also groups the list based on the section
-  organizePaletteHero: (methodsBankList, allDocs, excludedDocs) ->
-    @entries = []
-    @tts = @supermodel.getModels ThangType
-    defaultSection = 'methods'
-    defaultSubSection = if @options.level.isType('game-dev') then 'game' else 'hero'
-    for prop, propIndex in methodsBankList
-      section = prop.section
-      subSection = prop.subSection
-      unless section # Set default section and sub-section for methods bank
-        section = defaultSection
-        subSection = defaultSubSection
-      propName = prop.name
-      doc = _.find (allDocs['__' + propName] ? []), (doc) ->
-        return true if !prop.componentName or (doc.componentName == prop.componentName)
-      if not doc and not excludedDocs['__' + propName] 
-        console.log 'could not find doc for', propName, 'from', allDocs['__' + propName]
-        doc = propName
-      if doc
-        @entries.push @addEntry(doc, section, subSection)
-    @entryGroups = _.groupBy @entries, (entry) -> entry.doc.section
-    
-
-  addEntry: (doc, section, subSection, shortenize=true, isSnippet=false, item=null, showImage=false) ->
-    if doc.type is 'spawnable'
-      thangName = doc.name
-      if @thang.spawnAliases[thangName]
-        thangName = @thang.spawnAliases[thangName][0]
-      info = @thang.buildables[thangName]
-      tt = _.find @tts, (t) -> t.get('original') is info?.thangType
-      if tt
-        new SpellPaletteThangEntryView doc: doc, section: section, subSection: subSection, thang: tt, buildable: info, buildableName: doc.name, shortenize: shortenize, language: @options.language, level: @options.level, useHero: @useHero
-    else
-      writable = (if _.isString(doc) then doc else doc.name) in (@thang.apiUserProperties ? [])
-      new SpellPaletteEntryView doc: doc, section: section, subSection: subSection, thang: @thang, shortenize: shortenize, isSnippet: isSnippet, language: @options.language, writable: writable, level: @options.level, item: item, showImage: showImage, useHero: @useHero
-
-  # This uses the legacy logic to publish event for auto completion in the code editor using programmable properties.
-  # This can potentially be merged with the logic in organizePaletteHero, but currently doing that makes it behave differently, so keeping it as it is for now
-  publishAutoCompleteEvent: (allDocs) ->
-    propsByItem = {}
-    itemsByProp = {}
-    if @options.programmable
-      propStorage =
-        'this': 'programmableProperties'
-        more: 'moreProgrammableProperties'
-        Math: 'programmableMathProperties'
-        Array: 'programmableArrayProperties'
-        Object: 'programmableObjectProperties'
-        String: 'programmableStringProperties'
-        Global: 'programmableGlobalProperties'
-        Function: 'programmableFunctionProperties'
-        RegExp: 'programmableRegExpProperties'
-        Date: 'programmableDateProperties'
-        Number: 'programmableNumberProperties'
-        JSON: 'programmableJSONProperties'
-        LoDash: 'programmableLoDashProperties'
-        Vector: 'programmableVectorProperties'
-        HTML: 'programmableHTMLProperties'
-        WebJavaScript: 'programmableWebJavaScriptProperties'
-        jQuery: 'programmableJQueryProperties'
-        CSS: 'programmableCSSProperties'
-        snippets: 'programmableSnippets'
-    else
-      propStorage =
-        'this': ['apiProperties', 'apiMethods']
-    
-    itemThangTypes = {}
-    itemThangTypes[tt.get('name')] = tt for tt in @supermodel.getModels ThangType  # Also heroes
-
-    # Make sure that we get the spellbook first, then the primary hand, then anything else.
-    slots = _.sortBy _.keys(@thang.inventoryThangTypeNames ? {}), (slot) ->
-      if slot is 'left-hand' then 0 else if slot is 'right-hand' then 1 else 2
-    for slot in slots
-      thangTypeName = @thang.inventoryThangTypeNames[slot]
-      if item = itemThangTypes[thangTypeName]
-        unless item.get('components')
-          console.error 'Item', item, 'did not have any components when we went to assemble docs.'
-        for component in item.get('components') ? [] when component.config
-          for owner, storages of propStorage
-            if props = component.config[storages]
-              for prop in _.sortBy(props) when prop[0] isnt '_' and not itemsByProp[prop]  # no private properties
-                continue if prop is 'moveXY' and @options.level.get('slug') is 'slalom'  # Hide for Slalom
-                continue if @thang.excludedProperties and prop in @thang.excludedProperties
-                propsByItem[item.get('name')] ?= []
-                propsByItem[item.get('name')].push owner: owner, prop: prop, item: item
-                itemsByProp[prop] = item
-      else
-        console.log @thang.id, "couldn't find item ThangType for", slot, thangTypeName
-
-    for owner, storage of propStorage
-      continue unless owner in ['this', 'more', 'snippets', 'HTML', 'CSS', 'WebJavaScript', 'jQuery']
-      for prop in _.reject(@thang[storage] ? [], (prop) -> prop[0] is '_')  # no private properties
-        continue if prop is 'say' and @options.level.get 'hidesSay'  # Hide for Dungeon Campaign
-        continue if prop is 'moveXY' and @options.level.get('slug') is 'slalom'  # Hide for Slalom
-        continue if @thang.excludedProperties and prop in @thang.excludedProperties
-        propsByItem['Hero'] ?= []
-        propsByItem['Hero'].push owner: owner, prop: prop, item: itemThangTypes[@thang.spriteName]
-    Backbone.Mediator.publish 'tome:update-snippets', propGroups: propsByItem, allDocs: allDocs, language: @options.language
+    static initClass() {
+      this.prototype.id = 'spell-palette-view';
+      this.prototype.template = require('ozaria/site/templates/play/level/tome/spell-palette-view');
+      this.prototype.controlsEnabled = true;
   
-  onDisableControls: (e) -> @toggleControls e, false
-  onEnableControls: (e) -> @toggleControls e, true
-  toggleControls: (e, enabled) ->
-    return if e.controls and not ('palette' in e.controls)
-    return if enabled is @controlsEnabled
-    @controlsEnabled = enabled
-    @$el.find('*').attr('disabled', not enabled)
-    @$el.toggleClass 'controls-disabled', not enabled
+      this.prototype.subscriptions = {
+        'level:disable-controls': 'onDisableControls',
+        'level:enable-controls': 'onEnableControls',
+        'surface:frame-changed': 'onFrameChanged',
+        'tome:change-language': 'onTomeChangedLanguage',
+        'tome:palette-clicked': 'onPalleteClick',
+        'surface:stage-mouse-down': 'closeCommandBank'
+      };
+  
+  
+      this.prototype.events = {
+        'click .command-bank-header': 'onClickHeader',
+        'click .closeBtn': 'onClickClose',
+        'click .sub-section-header': 'onSubSectionHeaderClick',
+        'click': 'onClick'
+      };
+    }
 
-  onFrameChanged: (e) ->
-    return unless e.selectedThang?.id is @thang?.id
-    @options.thang = @thang = e.selectedThang  # Update our thang to the current version
+    initialize(options) {
+      ({level: this.level, session: this.session, thang: this.thang, useHero: this.useHero} = options);
+      this.aceEditors = [];
+      this.createPalette();
+      return $(window).on('resize', this.onResize);
+    }
 
-  onTomeChangedLanguage: (e) ->
-    @updateCodeLanguage e.language
-    entry.destroy() for entry in @entries
-    @createPalette()
-    @render()
+    getRenderData() {
+      const c = super.getRenderData();
+      c.entryGroups = this.entryGroups;
+      c._ = _;
+      return c;
+    }
 
-  onClick: (e) ->
-    rightBorderWidth = parseInt(@$el.css('borderRightWidth'))
-    leftPanelWidth = parseInt(@$el.find('.left').css('width'))
-    rightPanelWidth = parseInt(@$el.find('.right').css('width'))
-    viewWidth = parseInt(@$el.css('width'))
-    viewWidthOpen = rightBorderWidth + leftPanelWidth # when only left panel is open
-    viewWidthExpanded = rightBorderWidth + leftPanelWidth + rightPanelWidth # when completely open with left and right panel
-    if viewWidth == rightBorderWidth
-      @$el.addClass('open')
-    else if (viewWidth == viewWidthOpen && e.offsetX > leftPanelWidth) || (viewWidth == viewWidthExpanded && e.offsetX > leftPanelWidth + rightPanelWidth)
-      @closeCommandBank()
+    afterRender() {
+      super.afterRender();
+      return (() => {
+        const result = [];
+        for (let group in this.entryGroups) {
+          let entries = this.entryGroups[group];
+          group = _.string.slugify(group);
+          const itemGroup = $('<div class="property-entry-item-group"></div>').appendTo(this.$el.find('.properties-'+group));
+          const entrySubGroups = _.groupBy(entries, entry => entry.doc.subSection || 'none');
+          for (let subGroup in entrySubGroups) {
+            var itemSubGroup;
+            entries = entrySubGroups[subGroup];
+            if (subGroup !== 'none') {
+              const header = $(`<div class='sub-section-header' data-panel='#sub-section-${subGroup}-${group}'> \
+<span>${subGroup}</span> \
+<div style='float: right; padding-top: 3px;' class='glyphicon glyphicon-chevron-down blue-glyphicon'></div> \
+</a>`).appendTo(itemGroup);
+              itemSubGroup = $(`<div class='property-entry-item-sub-group collapse' id='sub-section-${subGroup}-${group}'></div>`).appendTo(itemGroup);
+            }
+            for (let entryIndex = 0; entryIndex < entries.length; entryIndex++) {
+              const entry = entries[entryIndex];
+              if (subGroup !== 'none') {
+                itemSubGroup.append(entry.el);
+              } else {
+                itemGroup.append(entry.el);
+              }
+              entry.render();
+            }
+          }  // Render after appending so that we can access parent container for popover
+          this.$el.addClass('hero');
+          result.push(this.$el.toggleClass('shortenize', Boolean(true)));
+        }
+        return result;
+      })();
+    }
 
-  onClickHeader: (e) ->
-    @closeCommandBank()
+    afterInsert() {
+      super.afterInsert();
+      return _.delay(() => { if (!$('#spell-view').is('.shown')) { return (this.$el != null ? this.$el.css('bottom', 0) : undefined); } });
+    }
 
-  onSubSectionHeaderClick: (e) ->
-    $et = @$(e.currentTarget)
-    target = @$($et.attr('data-panel'))
-    isCollapsed = !target.hasClass('in')
-    if isCollapsed
-      target.collapse 'show'
-      $et.find('.glyphicon').removeClass('glyphicon-chevron-down').addClass('glyphicon-chevron-up')
-      $et.toggleClass('selected', true)
-    else
-      target.collapse 'hide'
-      $et.find('.glyphicon').removeClass('glyphicon-chevron-up').addClass('glyphicon-chevron-down')
-      $et.toggleClass('selected', false)
+    updateCodeLanguage(language) {
+      return this.options.language = language;
+    }
 
-    setTimeout () =>
-      @$('.nano').nanoScroller alwaysVisible: true
-    , 200
-    e.preventDefault()
+    onResize(e) {
+      return (typeof this.updateMaxHeight === 'function' ? this.updateMaxHeight() : undefined);
+    }
 
-  onClickClose: (e) ->
-    @closeRightPanel()
+    createPalette() {
+      Backbone.Mediator.publish('tome:palette-cleared', {thangID: this.thang.id});
+      const lcs = this.supermodel.getModels(LevelComponent);
 
-  closeRightPanel: () =>
-    @$el.find('.left .selected').removeClass 'selected'
-    @$el.removeClass('expand')
+      const allDocs = {};
+      const excludedDocs = {};
+      for (let lc of Array.from(lcs)) {
+        var left;
+        for (let doc of Array.from(((left = lc.get('propertyDocumentation')) != null ? left : []))) {
+          var name;
+          if (doc.codeLanguages && !(Array.from(doc.codeLanguages).includes(this.options.language))) {
+            excludedDocs['__' + doc.name] = doc;
+            continue;
+          }
+          if (allDocs[name = '__' + doc.name] == null) { allDocs[name] = []; }
+          allDocs['__' + doc.name].push(doc);
+          if (doc.type === 'snippet') { doc.owner = 'snippets'; }
+          doc.componentName = lc.get('name');
+        }
+      }
 
-  closeCommandBank: () =>
-    @closeRightPanel()
-    @$el.removeClass('open')
+      const methodsBankList = this.options.level.get('methodsBankList') || [];
+    
+      if (methodsBankList.length === 0) {
+        console.log("Methods Bank list is empty!!");
+      } else {
+        this.organizePaletteHero(methodsBankList, allDocs, excludedDocs);
+      }
+      return this.publishAutoCompleteEvent(allDocs);
+    }
 
-  onPalleteClick: (e) ->
-    @$el.addClass('expand')
-    content = @$el.find(".rightContentTarget")
-    content.html(e.entry.doc.initialHTML)
-    content.i18n()
-    @applyRTLIfNeeded()
-    codeLanguage = e.entry.options.language
-    oldEditor.destroy() for oldEditor in @aceEditors
-    @aceEditors = []
-    aceEditors = @aceEditors
-    # Initialize Ace for each popover code snippet that still needs it
-    content.find('.docs-ace').each ->
-      aceEditor = aceUtils.initializeACE @, codeLanguage
-      aceEditor.renderer.setShowGutter true
-      aceEditors.push aceEditor
+    // Reads the methods bank list and find its documentation from allDocs(i.e. docs coming from level components)
+    // This also groups the list based on the section
+    organizePaletteHero(methodsBankList, allDocs, excludedDocs) {
+      let doc, section;
+      this.entries = [];
+      this.tts = this.supermodel.getModels(ThangType);
+      const defaultSection = 'methods';
+      const defaultSubSection = this.options.level.isType('game-dev') ? 'game' : 'hero';
+      for (let propIndex = 0; propIndex < methodsBankList.length; propIndex++) {
+        var left;
+        var prop = methodsBankList[propIndex];
+        ({
+          section
+        } = prop);
+        let {
+          subSection
+        } = prop;
+        if (!section) { // Set default section and sub-section for methods bank
+          section = defaultSection;
+          subSection = defaultSubSection;
+        }
+        const propName = prop.name;
+        doc = _.find(((left = allDocs['__' + propName]) != null ? left : []), function(doc) {
+          if (!prop.componentName || (doc.componentName === prop.componentName)) { return true; }
+        });
+        if (!doc && !excludedDocs['__' + propName]) { 
+          console.log('could not find doc for', propName, 'from', allDocs['__' + propName]);
+          doc = propName;
+        }
+        if (doc) {
+          this.entries.push(this.addEntry(doc, section, subSection));
+        }
+      }
+      return this.entryGroups = _.groupBy(this.entries, entry => entry.doc.section);
+    }
+    
 
-  destroy: ->
-    entry.destroy() for entry in @entries
-    @toggleBackground = null
-    $(window).off 'resize', @onResize
-    @setupManager?.destroy()
-    super()
+    addEntry(doc, section, subSection, shortenize, isSnippet, item=null, showImage) {
+      if (shortenize == null) { shortenize = true; }
+      if (isSnippet == null) { isSnippet = false; }
+      if (showImage == null) { showImage = false; }
+      if (doc.type === 'spawnable') {
+        let thangName = doc.name;
+        if (this.thang.spawnAliases[thangName]) {
+          thangName = this.thang.spawnAliases[thangName][0];
+        }
+        const info = this.thang.buildables[thangName];
+        const tt = _.find(this.tts, t => t.get('original') === (info != null ? info.thangType : undefined));
+        if (tt) {
+          return new SpellPaletteThangEntryView({doc, section, subSection, thang: tt, buildable: info, buildableName: doc.name, shortenize, language: this.options.language, level: this.options.level, useHero: this.useHero});
+        }
+      } else {
+        let needle;
+        const writable = ((needle = _.isString(doc) ? doc : doc.name), Array.from((this.thang.apiUserProperties != null ? this.thang.apiUserProperties : [])).includes(needle));
+        return new SpellPaletteEntryView({doc, section, subSection, thang: this.thang, shortenize, isSnippet, language: this.options.language, writable, level: this.options.level, item, showImage, useHero: this.useHero});
+      }
+    }
+
+    // This uses the legacy logic to publish event for auto completion in the code editor using programmable properties.
+    // This can potentially be merged with the logic in organizePaletteHero, but currently doing that makes it behave differently, so keeping it as it is for now
+    publishAutoCompleteEvent(allDocs) {
+      let item, owner, prop, propStorage;
+      const propsByItem = {};
+      const itemsByProp = {};
+      if (this.options.programmable) {
+        propStorage = {
+          'this': 'programmableProperties',
+          more: 'moreProgrammableProperties',
+          Math: 'programmableMathProperties',
+          Array: 'programmableArrayProperties',
+          Object: 'programmableObjectProperties',
+          String: 'programmableStringProperties',
+          Global: 'programmableGlobalProperties',
+          Function: 'programmableFunctionProperties',
+          RegExp: 'programmableRegExpProperties',
+          Date: 'programmableDateProperties',
+          Number: 'programmableNumberProperties',
+          JSON: 'programmableJSONProperties',
+          LoDash: 'programmableLoDashProperties',
+          Vector: 'programmableVectorProperties',
+          HTML: 'programmableHTMLProperties',
+          WebJavaScript: 'programmableWebJavaScriptProperties',
+          jQuery: 'programmableJQueryProperties',
+          CSS: 'programmableCSSProperties',
+          snippets: 'programmableSnippets'
+        };
+      } else {
+        propStorage =
+          {'this': ['apiProperties', 'apiMethods']};
+      }
+    
+      const itemThangTypes = {};
+      for (let tt of Array.from(this.supermodel.getModels(ThangType))) { itemThangTypes[tt.get('name')] = tt; }  // Also heroes
+
+      // Make sure that we get the spellbook first, then the primary hand, then anything else.
+      const slots = _.sortBy(_.keys(this.thang.inventoryThangTypeNames != null ? this.thang.inventoryThangTypeNames : {}), function(slot) {
+        if (slot === 'left-hand') { return 0; } else if (slot === 'right-hand') { return 1; } else { return 2; }
+      });
+      for (let slot of Array.from(slots)) {
+        const thangTypeName = this.thang.inventoryThangTypeNames[slot];
+        if (item = itemThangTypes[thangTypeName]) {
+          var left;
+          if (!item.get('components')) {
+            console.error('Item', item, 'did not have any components when we went to assemble docs.');
+          }
+          for (let component of Array.from((left = item.get('components')) != null ? left : [])) {
+            if (component.config) {
+              for (owner in propStorage) {
+                var props;
+                const storages = propStorage[owner];
+                if (props = component.config[storages]) {
+                  for (prop of Array.from(_.sortBy(props))) {  // no private properties
+                    if ((prop[0] !== '_') && !itemsByProp[prop]) {var name;
+                    
+                      if ((prop === 'moveXY') && (this.options.level.get('slug') === 'slalom')) { continue; }  // Hide for Slalom
+                      if (this.thang.excludedProperties && Array.from(this.thang.excludedProperties).includes(prop)) { continue; }
+                      if (propsByItem[name = item.get('name')] == null) { propsByItem[name] = []; }
+                      propsByItem[item.get('name')].push({owner, prop, item});
+                      itemsByProp[prop] = item;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } else {
+          console.log(this.thang.id, "couldn't find item ThangType for", slot, thangTypeName);
+        }
+      }
+
+      for (owner in propStorage) {
+        const storage = propStorage[owner];
+        if (!['this', 'more', 'snippets', 'HTML', 'CSS', 'WebJavaScript', 'jQuery'].includes(owner)) { continue; }
+        for (prop of Array.from(_.reject(this.thang[storage] != null ? this.thang[storage] : [], prop => prop[0] === '_'))) {  // no private properties
+          if ((prop === 'say') && this.options.level.get('hidesSay')) { continue; }  // Hide for Dungeon Campaign
+          if ((prop === 'moveXY') && (this.options.level.get('slug') === 'slalom')) { continue; }  // Hide for Slalom
+          if (this.thang.excludedProperties && Array.from(this.thang.excludedProperties).includes(prop)) { continue; }
+          if (propsByItem['Hero'] == null) { propsByItem['Hero'] = []; }
+          propsByItem['Hero'].push({owner, prop, item: itemThangTypes[this.thang.spriteName]});
+        }
+      }
+      return Backbone.Mediator.publish('tome:update-snippets', {propGroups: propsByItem, allDocs, language: this.options.language});
+    }
+  
+    onDisableControls(e) { return this.toggleControls(e, false); }
+    onEnableControls(e) { return this.toggleControls(e, true); }
+    toggleControls(e, enabled) {
+      if (e.controls && !(Array.from(e.controls).includes('palette'))) { return; }
+      if (enabled === this.controlsEnabled) { return; }
+      this.controlsEnabled = enabled;
+      this.$el.find('*').attr('disabled', !enabled);
+      return this.$el.toggleClass('controls-disabled', !enabled);
+    }
+
+    onFrameChanged(e) {
+      if ((e.selectedThang != null ? e.selectedThang.id : undefined) !== (this.thang != null ? this.thang.id : undefined)) { return; }
+      return this.options.thang = (this.thang = e.selectedThang);  // Update our thang to the current version
+    }
+
+    onTomeChangedLanguage(e) {
+      this.updateCodeLanguage(e.language);
+      for (let entry of Array.from(this.entries)) { entry.destroy(); }
+      this.createPalette();
+      return this.render();
+    }
+
+    onClick(e) {
+      const rightBorderWidth = parseInt(this.$el.css('borderRightWidth'));
+      const leftPanelWidth = parseInt(this.$el.find('.left').css('width'));
+      const rightPanelWidth = parseInt(this.$el.find('.right').css('width'));
+      const viewWidth = parseInt(this.$el.css('width'));
+      const viewWidthOpen = rightBorderWidth + leftPanelWidth; // when only left panel is open
+      const viewWidthExpanded = rightBorderWidth + leftPanelWidth + rightPanelWidth; // when completely open with left and right panel
+      if (viewWidth === rightBorderWidth) {
+        return this.$el.addClass('open');
+      } else if (((viewWidth === viewWidthOpen) && (e.offsetX > leftPanelWidth)) || ((viewWidth === viewWidthExpanded) && (e.offsetX > (leftPanelWidth + rightPanelWidth)))) {
+        return this.closeCommandBank();
+      }
+    }
+
+    onClickHeader(e) {
+      return this.closeCommandBank();
+    }
+
+    onSubSectionHeaderClick(e) {
+      const $et = this.$(e.currentTarget);
+      const target = this.$($et.attr('data-panel'));
+      const isCollapsed = !target.hasClass('in');
+      if (isCollapsed) {
+        target.collapse('show');
+        $et.find('.glyphicon').removeClass('glyphicon-chevron-down').addClass('glyphicon-chevron-up');
+        $et.toggleClass('selected', true);
+      } else {
+        target.collapse('hide');
+        $et.find('.glyphicon').removeClass('glyphicon-chevron-up').addClass('glyphicon-chevron-down');
+        $et.toggleClass('selected', false);
+      }
+
+      setTimeout(() => {
+        return this.$('.nano').nanoScroller({alwaysVisible: true});
+      }
+      , 200);
+      return e.preventDefault();
+    }
+
+    onClickClose(e) {
+      return this.closeRightPanel();
+    }
+
+    closeRightPanel() {
+      this.$el.find('.left .selected').removeClass('selected');
+      return this.$el.removeClass('expand');
+    }
+
+    closeCommandBank() {
+      this.closeRightPanel();
+      return this.$el.removeClass('open');
+    }
+
+    onPalleteClick(e) {
+      this.$el.addClass('expand');
+      const content = this.$el.find(".rightContentTarget");
+      content.html(e.entry.doc.initialHTML);
+      content.i18n();
+      this.applyRTLIfNeeded();
+      const codeLanguage = e.entry.options.language;
+      for (let oldEditor of Array.from(this.aceEditors)) { oldEditor.destroy(); }
+      this.aceEditors = [];
+      const {
+        aceEditors
+      } = this;
+      // Initialize Ace for each popover code snippet that still needs it
+      return content.find('.docs-ace').each(function() {
+        const aceEditor = aceUtils.initializeACE(this, codeLanguage);
+        aceEditor.renderer.setShowGutter(true);
+        return aceEditors.push(aceEditor);
+      });
+    }
+
+    destroy() {
+      for (let entry of Array.from(this.entries)) { entry.destroy(); }
+      this.toggleBackground = null;
+      $(window).off('resize', this.onResize);
+      if (this.setupManager != null) {
+        this.setupManager.destroy();
+      }
+      return super.destroy();
+    }
+  };
+  SpellPaletteView.initClass();
+  return SpellPaletteView;
+})());

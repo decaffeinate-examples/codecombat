@@ -1,44 +1,62 @@
-fetchJson = require './fetch-json'
+/*
+ * decaffeinate suggestions:
+ * DS102: Remove unnecessary code created because of implicit returns
+ * DS207: Consider shorter variations of null checks
+ * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
+ */
+const fetchJson = require('./fetch-json');
 
 module.exports = {
-  get: ({ classroomID }, options={}) ->
-    fetchJson("/db/classroom/#{classroomID}", options)
+  get({ classroomID }, options) {
+    if (options == null) { options = {}; }
+    return fetchJson(`/db/classroom/${classroomID}`, options);
+  },
 
-  # TODO: Set this up to allow using classroomID instead
-  getMembers: ({classroom}, options) ->
-    classroomID = classroom._id
-    removeDeleted = options.removeDeleted
-    delete options.removeDeleted
-    limit = 10
-    skip = 0
-    size = _.size(classroom.members)
-    url = "/db/classroom/#{classroomID}/members"
-    options.data ?= {}
-    options.data.memberLimit = limit
-    options.remove = false
-    jqxhrs = []
-    while skip < size
-      options.data.memberSkip = skip
-      jqxhrs.push(fetchJson(url, options))
-      skip += limit
-    return Promise.all(jqxhrs).then (data) ->
-      users = _.flatten(data)
-      if removeDeleted
-        users = _.filter users, (user) ->
-          not user.deleted
-      return users
+  // TODO: Set this up to allow using classroomID instead
+  getMembers({classroom}, options) {
+    const classroomID = classroom._id;
+    const {
+      removeDeleted
+    } = options;
+    delete options.removeDeleted;
+    const limit = 10;
+    let skip = 0;
+    const size = _.size(classroom.members);
+    const url = `/db/classroom/${classroomID}/members`;
+    if (options.data == null) { options.data = {}; }
+    options.data.memberLimit = limit;
+    options.remove = false;
+    const jqxhrs = [];
+    while (skip < size) {
+      options.data.memberSkip = skip;
+      jqxhrs.push(fetchJson(url, options));
+      skip += limit;
+    }
+    return Promise.all(jqxhrs).then(function(data) {
+      let users = _.flatten(data);
+      if (removeDeleted) {
+        users = _.filter(users, user => !user.deleted);
+      }
+      return users;
+    });
+  },
 
-  getCourseLevels: ({classroomID, courseID}, options={}) ->
-    fetchJson("/db/classroom/#{classroomID}/courses/#{courseID}/levels", options)
+  getCourseLevels({classroomID, courseID}, options) {
+    if (options == null) { options = {}; }
+    return fetchJson(`/db/classroom/${classroomID}/courses/${courseID}/levels`, options);
+  },
 
-  addMembers: ({classroomID, members}, options={}) ->
-    fetchJson("/db/classroom/#{classroomID}/add-members", _.assign({}, options, {
-      method: 'POST'
+  addMembers({classroomID, members}, options) {
+    if (options == null) { options = {}; }
+    return fetchJson(`/db/classroom/${classroomID}/add-members`, _.assign({}, options, {
+      method: 'POST',
       json: {members}
-    }))
+    }));
+  },
 
-  fetchByOwner: (ownerId) ->
-    fetchJson("/db/classroom?ownerID=#{ownerId}", {
+  fetchByOwner(ownerId) {
+    return fetchJson(`/db/classroom?ownerID=${ownerId}`, {
       method: 'GET'
-    })
-}
+    });
+  }
+};

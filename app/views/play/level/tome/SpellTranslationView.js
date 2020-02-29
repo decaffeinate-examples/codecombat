@@ -1,90 +1,148 @@
-CocoView = require 'views/core/CocoView'
-LevelComponent = require 'models/LevelComponent'
-template = require 'templates/play/level/tome/spell_translation'
-ace = require('lib/aceContainer')
-Range = ace.require('ace/range').Range
-TokenIterator = ace.require('ace/token_iterator').TokenIterator
-utils = require 'core/utils'
+/*
+ * decaffeinate suggestions:
+ * DS001: Remove Babel/TypeScript constructor workaround
+ * DS101: Remove unnecessary use of Array.from
+ * DS102: Remove unnecessary code created because of implicit returns
+ * DS103: Rewrite code to no longer use __guard__
+ * DS104: Avoid inline assignments
+ * DS206: Consider reworking classes to avoid initClass
+ * DS207: Consider shorter variations of null checks
+ * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
+ */
+let SpellTranslationView;
+const CocoView = require('views/core/CocoView');
+const LevelComponent = require('models/LevelComponent');
+const template = require('templates/play/level/tome/spell_translation');
+const ace = require('lib/aceContainer');
+const {
+  Range
+} = ace.require('ace/range');
+const {
+  TokenIterator
+} = ace.require('ace/token_iterator');
+const utils = require('core/utils');
 
-module.exports = class SpellTranslationView extends CocoView
-  className: 'spell-translation-view'
-  template: template
-  
-  events:
-    'mousemove': ->
-      @$el.hide()
+module.exports = (SpellTranslationView = (function() {
+  SpellTranslationView = class SpellTranslationView extends CocoView {
+    static initClass() {
+      this.prototype.className = 'spell-translation-view';
+      this.prototype.template = template;
+    
+      this.prototype.events = {
+        'mousemove'() {
+          return this.$el.hide();
+        }
+      };
+    }
 
-  constructor: (options) ->
-    super options
-    @ace = options.ace
+    constructor(options) {
+      {
+        // Hack: trick Babel/TypeScript into allowing this before super.
+        if (false) { super(); }
+        let thisFn = (() => { return this; }).toString();
+        let thisName = thisFn.match(/return (?:_assertThisInitialized\()*(\w+)\)*;/)[1];
+        eval(`${thisName} = this;`);
+      }
+      this.setTooltipText = this.setTooltipText.bind(this);
+      this.onMouseMove = this.onMouseMove.bind(this);
+      super(options);
+      this.ace = options.ace;
     
-    levelComponents = @supermodel.getModels LevelComponent
-    @componentTranslations = levelComponents.reduce((acc, lc) ->
-      for doc in (lc.get('propertyDocumentation') ? [])
-        translated = utils.i18n(doc, 'name', null, false)
-        acc[doc.name] = translated if translated isnt doc.name
-      acc
-    , {})
+      const levelComponents = this.supermodel.getModels(LevelComponent);
+      this.componentTranslations = levelComponents.reduce(function(acc, lc) {
+        let left;
+        for (let doc of Array.from(((left = lc.get('propertyDocumentation')) != null ? left : []))) {
+          const translated = utils.i18n(doc, 'name', null, false);
+          if (translated !== doc.name) { acc[doc.name] = translated; }
+        }
+        return acc;
+      }
+      , {});
     
-    @onMouseMove = _.throttle @onMouseMove, 25
+      this.onMouseMove = _.throttle(this.onMouseMove, 25);
+    }
     
-  afterRender: ->
-    super()
-    @ace.on 'mousemove', @onMouseMove
+    afterRender() {
+      super.afterRender();
+      return this.ace.on('mousemove', this.onMouseMove);
+    }
 
-  setTooltipText: (text) =>
-    @$el.find('code').text text
-    @$el.show().css(@pos)
+    setTooltipText(text) {
+      this.$el.find('code').text(text);
+      return this.$el.show().css(this.pos);
+    }
     
-  isIdentifier: (t) ->
-    t and (_.any([/identifier/, /keyword/], (regex) -> regex.test(t.type)) or t.value is 'this')
+    isIdentifier(t) {
+      return t && (_.any([/identifier/, /keyword/], regex => regex.test(t.type)) || (t.value === 'this'));
+    }
     
-  onMouseMove: (e) =>
-    return if @destroyed
-    pos = e.getDocumentPosition()
-    it = new TokenIterator e.editor.session, pos.row, pos.column
-    endOfLine = it.getCurrentToken()?.index is it.$rowTokens.length - 1
-    while it.getCurrentTokenRow() is pos.row and not @isIdentifier(token = it.getCurrentToken())
-      break if endOfLine or not token  # Don't iterate beyond end or beginning of line
-      it.stepBackward()
-    unless @isIdentifier(token)
-      @word = null
-      @update()
-      return
-    try
-      # Ace was breaking under some (?) conditions, dependent on mouse location.
-      #   with $rowTokens = [] (but should have things)
-      start = it.getCurrentTokenColumn()
-    catch error
-      start = 0
-    end = start + token.value.length
-    if @isIdentifier(token)
-      @word = token.value
-      @markerRange = new Range pos.row, start, pos.row, end
-      @reposition(e.domEvent)
-    @update()
+    onMouseMove(e) {
+      let start, token;
+      if (this.destroyed) { return; }
+      const pos = e.getDocumentPosition();
+      const it = new TokenIterator(e.editor.session, pos.row, pos.column);
+      const endOfLine = __guard__(it.getCurrentToken(), x => x.index) === (it.$rowTokens.length - 1);
+      while ((it.getCurrentTokenRow() === pos.row) && !this.isIdentifier(token = it.getCurrentToken())) {
+        if (endOfLine || !token) { break; }  // Don't iterate beyond end or beginning of line
+        it.stepBackward();
+      }
+      if (!this.isIdentifier(token)) {
+        this.word = null;
+        this.update();
+        return;
+      }
+      try {
+        // Ace was breaking under some (?) conditions, dependent on mouse location.
+        //   with $rowTokens = [] (but should have things)
+        start = it.getCurrentTokenColumn();
+      } catch (error) {
+        start = 0;
+      }
+      const end = start + token.value.length;
+      if (this.isIdentifier(token)) {
+        this.word = token.value;
+        this.markerRange = new Range(pos.row, start, pos.row, end);
+        this.reposition(e.domEvent);
+      }
+      return this.update();
+    }
     
-  reposition: (e) ->
-    offsetX = e.offsetX ? e.clientX - $(e.target).offset().left
-    offsetY = e.offsetY ? e.clientY - $(e.target).offset().top
-    w = $(document).width() - 20
-    offsetX = w - $(e.target).offset().left - @$el.width() if e.clientX + @$el.width() > w
-    @pos = {left: offsetX + 80, top: offsetY - 20}
-    @$el.css(@pos)
+    reposition(e) {
+      let offsetX = e.offsetX != null ? e.offsetX : e.clientX - $(e.target).offset().left;
+      const offsetY = e.offsetY != null ? e.offsetY : e.clientY - $(e.target).offset().top;
+      const w = $(document).width() - 20;
+      if ((e.clientX + this.$el.width()) > w) { offsetX = w - $(e.target).offset().left - this.$el.width(); }
+      this.pos = {left: offsetX + 80, top: offsetY - 20};
+      return this.$el.css(this.pos);
+    }
     
-  onMouseOut: ->
-    @word = null
-    @markerRange = null
-    @update()
+    onMouseOut() {
+      this.word = null;
+      this.markerRange = null;
+      return this.update();
+    }
     
-  update: ->
-    i18nKey = 'code.'+@word
-    translation = @componentTranslations[@word] or $.t(i18nKey)
-    if @word and translation and translation not in [i18nKey, @word]
-      @setTooltipText translation
-    else
-      @$el.hide()
+    update() {
+      const i18nKey = 'code.'+this.word;
+      const translation = this.componentTranslations[this.word] || $.t(i18nKey);
+      if (this.word && translation && ![i18nKey, this.word].includes(translation)) {
+        return this.setTooltipText(translation);
+      } else {
+        return this.$el.hide();
+      }
+    }
 
-  destroy: ->
-    @ace?.removeEventListener 'mousemove', @onMouseMove
-    super()
+    destroy() {
+      if (this.ace != null) {
+        this.ace.removeEventListener('mousemove', this.onMouseMove);
+      }
+      return super.destroy();
+    }
+  };
+  SpellTranslationView.initClass();
+  return SpellTranslationView;
+})());
+
+function __guard__(value, transform) {
+  return (typeof value !== 'undefined' && value !== null) ? transform(value) : undefined;
+}

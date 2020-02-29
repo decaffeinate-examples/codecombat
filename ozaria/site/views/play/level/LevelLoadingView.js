@@ -1,198 +1,272 @@
-require('ozaria/site/styles/play/level/level-loading-view.sass')
-CocoView = require 'views/core/CocoView'
-template = require 'ozaria/site/templates/play/level/level-loading-view'
-ace = require('lib/aceContainer')
-utils = require 'core/utils'
-aceUtils = require 'core/aceUtils'
-SubscribeModal = require 'views/core/SubscribeModal'
-LevelGoals = require('./LevelGoals').default
-store = require 'core/store'
+/*
+ * decaffeinate suggestions:
+ * DS001: Remove Babel/TypeScript constructor workaround
+ * DS101: Remove unnecessary use of Array.from
+ * DS102: Remove unnecessary code created because of implicit returns
+ * DS103: Rewrite code to no longer use __guard__
+ * DS206: Consider reworking classes to avoid initClass
+ * DS207: Consider shorter variations of null checks
+ * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
+ */
+let LevelLoadingView;
+require('ozaria/site/styles/play/level/level-loading-view.sass');
+const CocoView = require('views/core/CocoView');
+const template = require('ozaria/site/templates/play/level/level-loading-view');
+const ace = require('lib/aceContainer');
+const utils = require('core/utils');
+const aceUtils = require('core/aceUtils');
+const SubscribeModal = require('views/core/SubscribeModal');
+const LevelGoals = require('./LevelGoals').default;
+const store = require('core/store');
 
-module.exports = class LevelLoadingView extends CocoView
-  id: 'level-loading-view'
-  template: template
-
-  events:
-    'click .start-subscription-button': 'onClickStartSubscription'
-
-  subscriptions:
-    'level:loaded': 'onLevelLoaded'  # If Level loads after level loading view.
-    'level:session-loaded': 'onSessionLoaded'
-    'level:subscription-required': 'onSubscriptionRequired'  # If they'd need a subscription.
-    'level:course-membership-required': 'onCourseMembershipRequired'  # If they need to be added to a course.
-    'level:license-required': 'onLicenseRequired' # If they need a license.
-    'subscribe-modal:subscribed': 'onSubscribed'
-
-  afterRender: ->
-    super()
-    unless @level?.get('loadingTip')
-      @$el.find('.tip.rare').remove() if _.random(1, 10) < 9
-      tips = @$el.find('.tip').addClass('to-remove')
-      tip = _.sample(tips)
-      $(tip).removeClass('to-remove').addClass('secret')
-      @$el.find('.to-remove').remove()
-    @onLevelLoaded level: @options.level if @options.level?.get('goals')  # If Level was already loaded.
-    @configureACEEditors()
-
-  configureACEEditors: ->
-    codeLanguage = @session?.get('codeLanguage') or me.get('aceConfig')?.language or 'python'
-    oldEditor.destroy() for oldEditor in @aceEditors ? []
-    @aceEditors = []
-    aceEditors = @aceEditors
-    @$el.find('pre:has(code[class*="lang-"])').each ->
-      aceEditor = aceUtils.initializeACE @, codeLanguage
-      aceEditors.push aceEditor
-
-  afterInsert: ->
-    super()
-
-  onLevelLoaded: (e) ->
-    return if @level
-    @level = e.level
-    @prepareGoals e
-    @prepareTip()
-
-  onSessionLoaded: (e) ->
-    return if @session
-    @session = e.session if e.session.get('creator') is me.id
-
-  prepareGoals: ->
-    @levelGoalsComponent = new LevelGoals({
-      el: @$('.list-unstyled')[0],
-      store,
-      propsData: { showStatus: false }
-    })
-    @levelGoalsComponent.goals = @level.get('goals')
-    goalContainer = @$el.find('.level-loading-goals')
-    @buttonTranslationKey = 'play_level.loading_start'
-    if @level.get('assessment') is 'cumulative'
-      @buttonTranslationKey = 'play_level.loading_start_combo'
-    else if @level.get('assessment')
-      @buttonTranslationKey = 'play_level.loading_start_concept'
-    @$('.start-level-button').text($.i18n.t(@buttonTranslationKey))
-
-    Vue.nextTick(=>
-      # TODO: move goals to vuex where everyone can check together which goals are visible.
-      # Use that instead of looking into the Vue result
-      numGoals = goalContainer.find('li').length
-      if numGoals
-        goalContainer.removeClass('secret')
-        if @level.get('assessment') is 'cumulative'
-          if numGoals > 1
-            @goalHeaderTranslationKey = 'play_level.combo_challenge_goals'
-          else
-            @goalHeaderTranslationKey = 'play_level.combo_challenge_goal'
-        else if @level.get('assessment')
-          if numGoals > 1
-            @goalHeaderTranslationKey = 'play_level.concept_challenge_goals'
-          else
-            @goalHeaderTranslationKey = 'play_level.concept_challenge_goal'
-        else
-          if numGoals > 1
-            @goalHeaderTranslationKey = 'play_level.goals'
-          else
-            @goalHeaderTranslationKey = 'play_level.goal'
-        goalContainer.find('.goals-title').text $.i18n.t @goalHeaderTranslationKey
-    )
-
-  prepareTip: ->
-    tip = @$el.find('.tip')
-    if @level.get('loadingTip')
-      loadingTip = utils.i18n @level.attributes, 'loadingTip'
-      loadingTip = marked(loadingTip)
-      tip.html(loadingTip).removeAttr('data-i18n')
-    tip.removeClass('secret')
-
-  showReady: ->
-    return if @shownReady
-    @shownReady = true
-    _.delay @finishShowingReady, 100  # Let any blocking JS hog the main thread before we show that we're done.
-
-  finishShowingReady: =>
-    return if @destroyed
-    @playSound 'level_loaded', 0.75  # old: loading_ready
-    @unveil()
-
-  unveil: () ->
-    return if @destroyed
-    @$loadingDetails = @$el.find('#loading-details')
-    duration = parseFloat(@$loadingDetails.css 'transition-duration') * 1000
-    unless @$el.hasClass 'unveiled'
-      @$el.addClass 'unveiled'
-      @unveilWings duration
-    @unveilLoadingFull()
-    _.delay @onUnveilEnded, duration
-
-  unveilLoadingFull: ->
-    # Get rid of the loading details screen entirely--the level is totally ready.
-    if @$el.hasClass 'preview-screen'
-      @$loadingDetails.css 'right', -@$loadingDetails.outerWidth(true)
-    else
-      @$loadingDetails.css 'top', -@$loadingDetails.outerHeight(true)
-    @$el.removeClass 'preview-screen'
-    $('#canvas-wrapper').removeClass 'preview-overlay'
-    if @unveilPreviewTime
-      levelSlug = @level?.get('slug') or @options.level?.get('slug')
-      timespent = (new Date().getTime() - @unveilPreviewTime) / 1000
-      window.tracker?.trackEvent 'Finish Viewing Intro', {
-        category: 'Play Level'
-        label: 'level loading'
-        level: levelSlug
-        levelID: levelSlug
-        timespent
+module.exports = (LevelLoadingView = (function() {
+  LevelLoadingView = class LevelLoadingView extends CocoView {
+    constructor(...args) {
+      {
+        // Hack: trick Babel/TypeScript into allowing this before super.
+        if (false) { super(); }
+        let thisFn = (() => { return this; }).toString();
+        let thisName = thisFn.match(/return (?:_assertThisInitialized\()*(\w+)\)*;/)[1];
+        eval(`${thisName} = this;`);
       }
+      this.finishShowingReady = this.finishShowingReady.bind(this);
+      this.onUnveilEnded = this.onUnveilEnded.bind(this);
+      this.onWindowResize = this.onWindowResize.bind(this);
+      super(...args);
+    }
 
-  resize: ->
-    maxHeight = $('#page-container').outerHeight(true)
-    minHeight = $('#code-area').outerHeight(true)
-    minHeight -= 20
-    @$el.css height: maxHeight
-    @$loadingDetails.css minHeight: minHeight, maxHeight: maxHeight
-    if @intro
-      $intro = @$el.find('.intro-doc')
-      $intro.css height: minHeight - $intro.offset().top - @$el.find('.progress-or-start-container').outerHeight() - 30 - 20
-      _.defer -> $intro.find('.nano').nanoScroller alwaysVisible: true
+    static initClass() {
+      this.prototype.id = 'level-loading-view';
+      this.prototype.template = template;
+  
+      this.prototype.events =
+        {'click .start-subscription-button': 'onClickStartSubscription'};
+  
+      this.prototype.subscriptions = {
+        'level:loaded': 'onLevelLoaded',  // If Level loads after level loading view.
+        'level:session-loaded': 'onSessionLoaded',
+        'level:subscription-required': 'onSubscriptionRequired',  // If they'd need a subscription.
+        'level:course-membership-required': 'onCourseMembershipRequired',  // If they need to be added to a course.
+        'level:license-required': 'onLicenseRequired', // If they need a license.
+        'subscribe-modal:subscribed': 'onSubscribed'
+      };
+    }
 
-  unveilWings: (duration) ->
-    @playSound 'loading-view-unveil', 0.5
-    @$el.find('.left-wing').css left: '-100%', backgroundPosition: 'right -400px top 0'
-    @$el.find('.right-wing').css right: '-100%', backgroundPosition: 'left -400px top 0'
-    $('#level-footer-background').detach().appendTo('#page-container').slideDown(duration) unless @level?.isType('web-dev')
+    afterRender() {
+      super.afterRender();
+      if (!(this.level != null ? this.level.get('loadingTip') : undefined)) {
+        if (_.random(1, 10) < 9) { this.$el.find('.tip.rare').remove(); }
+        const tips = this.$el.find('.tip').addClass('to-remove');
+        const tip = _.sample(tips);
+        $(tip).removeClass('to-remove').addClass('secret');
+        this.$el.find('.to-remove').remove();
+      }
+      if (this.options.level != null ? this.options.level.get('goals') : undefined) { this.onLevelLoaded({level: this.options.level}); }  // If Level was already loaded.
+      return this.configureACEEditors();
+    }
 
-  onUnveilEnded: =>
-    return if @destroyed
-    Backbone.Mediator.publish 'level:loading-view-unveiled', view: @
+    configureACEEditors() {
+      const codeLanguage = (this.session != null ? this.session.get('codeLanguage') : undefined) || __guard__(me.get('aceConfig'), x => x.language) || 'python';
+      for (let oldEditor of Array.from(this.aceEditors != null ? this.aceEditors : [])) { oldEditor.destroy(); }
+      this.aceEditors = [];
+      const {
+        aceEditors
+      } = this;
+      return this.$el.find('pre:has(code[class*="lang-"])').each(function() {
+        const aceEditor = aceUtils.initializeACE(this, codeLanguage);
+        return aceEditors.push(aceEditor);
+      });
+    }
 
-  onWindowResize: (e) =>
-    return if @destroyed
-    @$loadingDetails.css transition: 'none'
-    @resize()
+    afterInsert() {
+      return super.afterInsert();
+    }
 
-  onSubscriptionRequired: (e) ->
-    @$el.find('.level-loading-goals, .tip, .progress-or-start-container').hide()
-    @$el.find('.subscription-required').show()
+    onLevelLoaded(e) {
+      if (this.level) { return; }
+      this.level = e.level;
+      this.prepareGoals(e);
+      return this.prepareTip();
+    }
 
-  onCourseMembershipRequired: (e) ->
-    @$el.find('.level-loading-goals, .tip, .progress-or-start-container').hide()
-    @$el.find('.course-membership-required').show()
+    onSessionLoaded(e) {
+      if (this.session) { return; }
+      if (e.session.get('creator') === me.id) { return this.session = e.session; }
+    }
 
-  onLicenseRequired: (e) ->
-    @$el.find('.level-loading-goals, .tip, .progress-or-start-container').hide()
-    @$el.find('.license-required').show()
+    prepareGoals() {
+      this.levelGoalsComponent = new LevelGoals({
+        el: this.$('.list-unstyled')[0],
+        store,
+        propsData: { showStatus: false }
+      });
+      this.levelGoalsComponent.goals = this.level.get('goals');
+      const goalContainer = this.$el.find('.level-loading-goals');
+      this.buttonTranslationKey = 'play_level.loading_start';
+      if (this.level.get('assessment') === 'cumulative') {
+        this.buttonTranslationKey = 'play_level.loading_start_combo';
+      } else if (this.level.get('assessment')) {
+        this.buttonTranslationKey = 'play_level.loading_start_concept';
+      }
+      this.$('.start-level-button').text($.i18n.t(this.buttonTranslationKey));
 
-  onLoadError: (resource) ->
-    @$el.find('.level-loading-goals, .tip, .progress-or-start-container').hide()
-    @$el.find('.could-not-load').show()
+      return Vue.nextTick(() => {
+        // TODO: move goals to vuex where everyone can check together which goals are visible.
+        // Use that instead of looking into the Vue result
+        const numGoals = goalContainer.find('li').length;
+        if (numGoals) {
+          goalContainer.removeClass('secret');
+          if (this.level.get('assessment') === 'cumulative') {
+            if (numGoals > 1) {
+              this.goalHeaderTranslationKey = 'play_level.combo_challenge_goals';
+            } else {
+              this.goalHeaderTranslationKey = 'play_level.combo_challenge_goal';
+            }
+          } else if (this.level.get('assessment')) {
+            if (numGoals > 1) {
+              this.goalHeaderTranslationKey = 'play_level.concept_challenge_goals';
+            } else {
+              this.goalHeaderTranslationKey = 'play_level.concept_challenge_goal';
+            }
+          } else {
+            if (numGoals > 1) {
+              this.goalHeaderTranslationKey = 'play_level.goals';
+            } else {
+              this.goalHeaderTranslationKey = 'play_level.goal';
+            }
+          }
+          return goalContainer.find('.goals-title').text($.i18n.t(this.goalHeaderTranslationKey));
+        }
+      });
+    }
 
-  onClickStartSubscription: (e) ->
-    @openModalView new SubscribeModal()
-    levelSlug = @level?.get('slug') or @options.level?.get('slug')
-    # TODO: Added levelID on 2/9/16. Remove level property and associated AnalyticsLogEvent 'properties.level' index later.
-    window.tracker?.trackEvent 'Show subscription modal', category: 'Subscription', label: 'level loading', level: levelSlug, levelID: levelSlug
+    prepareTip() {
+      const tip = this.$el.find('.tip');
+      if (this.level.get('loadingTip')) {
+        let loadingTip = utils.i18n(this.level.attributes, 'loadingTip');
+        loadingTip = marked(loadingTip);
+        tip.html(loadingTip).removeAttr('data-i18n');
+      }
+      return tip.removeClass('secret');
+    }
 
-  onSubscribed: ->
-    document.location.reload()
+    showReady() {
+      if (this.shownReady) { return; }
+      this.shownReady = true;
+      return _.delay(this.finishShowingReady, 100);  // Let any blocking JS hog the main thread before we show that we're done.
+    }
 
-  destroy: ->
-    $(window).off 'resize', @onWindowResize
-    super()
+    finishShowingReady() {
+      if (this.destroyed) { return; }
+      this.playSound('level_loaded', 0.75);  // old: loading_ready
+      return this.unveil();
+    }
+
+    unveil() {
+      if (this.destroyed) { return; }
+      this.$loadingDetails = this.$el.find('#loading-details');
+      const duration = parseFloat(this.$loadingDetails.css('transition-duration')) * 1000;
+      if (!this.$el.hasClass('unveiled')) {
+        this.$el.addClass('unveiled');
+        this.unveilWings(duration);
+      }
+      this.unveilLoadingFull();
+      return _.delay(this.onUnveilEnded, duration);
+    }
+
+    unveilLoadingFull() {
+      // Get rid of the loading details screen entirely--the level is totally ready.
+      if (this.$el.hasClass('preview-screen')) {
+        this.$loadingDetails.css('right', -this.$loadingDetails.outerWidth(true));
+      } else {
+        this.$loadingDetails.css('top', -this.$loadingDetails.outerHeight(true));
+      }
+      this.$el.removeClass('preview-screen');
+      $('#canvas-wrapper').removeClass('preview-overlay');
+      if (this.unveilPreviewTime) {
+        const levelSlug = (this.level != null ? this.level.get('slug') : undefined) || (this.options.level != null ? this.options.level.get('slug') : undefined);
+        const timespent = (new Date().getTime() - this.unveilPreviewTime) / 1000;
+        return (window.tracker != null ? window.tracker.trackEvent('Finish Viewing Intro', {
+          category: 'Play Level',
+          label: 'level loading',
+          level: levelSlug,
+          levelID: levelSlug,
+          timespent
+        }) : undefined);
+      }
+    }
+
+    resize() {
+      const maxHeight = $('#page-container').outerHeight(true);
+      let minHeight = $('#code-area').outerHeight(true);
+      minHeight -= 20;
+      this.$el.css({height: maxHeight});
+      this.$loadingDetails.css({minHeight, maxHeight});
+      if (this.intro) {
+        const $intro = this.$el.find('.intro-doc');
+        $intro.css({height: minHeight - $intro.offset().top - this.$el.find('.progress-or-start-container').outerHeight() - 30 - 20});
+        return _.defer(() => $intro.find('.nano').nanoScroller({alwaysVisible: true}));
+      }
+    }
+
+    unveilWings(duration) {
+      this.playSound('loading-view-unveil', 0.5);
+      this.$el.find('.left-wing').css({left: '-100%', backgroundPosition: 'right -400px top 0'});
+      this.$el.find('.right-wing').css({right: '-100%', backgroundPosition: 'left -400px top 0'});
+      if (!(this.level != null ? this.level.isType('web-dev') : undefined)) { return $('#level-footer-background').detach().appendTo('#page-container').slideDown(duration); }
+    }
+
+    onUnveilEnded() {
+      if (this.destroyed) { return; }
+      return Backbone.Mediator.publish('level:loading-view-unveiled', {view: this});
+    }
+
+    onWindowResize(e) {
+      if (this.destroyed) { return; }
+      this.$loadingDetails.css({transition: 'none'});
+      return this.resize();
+    }
+
+    onSubscriptionRequired(e) {
+      this.$el.find('.level-loading-goals, .tip, .progress-or-start-container').hide();
+      return this.$el.find('.subscription-required').show();
+    }
+
+    onCourseMembershipRequired(e) {
+      this.$el.find('.level-loading-goals, .tip, .progress-or-start-container').hide();
+      return this.$el.find('.course-membership-required').show();
+    }
+
+    onLicenseRequired(e) {
+      this.$el.find('.level-loading-goals, .tip, .progress-or-start-container').hide();
+      return this.$el.find('.license-required').show();
+    }
+
+    onLoadError(resource) {
+      this.$el.find('.level-loading-goals, .tip, .progress-or-start-container').hide();
+      return this.$el.find('.could-not-load').show();
+    }
+
+    onClickStartSubscription(e) {
+      this.openModalView(new SubscribeModal());
+      const levelSlug = (this.level != null ? this.level.get('slug') : undefined) || (this.options.level != null ? this.options.level.get('slug') : undefined);
+      // TODO: Added levelID on 2/9/16. Remove level property and associated AnalyticsLogEvent 'properties.level' index later.
+      return (window.tracker != null ? window.tracker.trackEvent('Show subscription modal', {category: 'Subscription', label: 'level loading', level: levelSlug, levelID: levelSlug}) : undefined);
+    }
+
+    onSubscribed() {
+      return document.location.reload();
+    }
+
+    destroy() {
+      $(window).off('resize', this.onWindowResize);
+      return super.destroy();
+    }
+  };
+  LevelLoadingView.initClass();
+  return LevelLoadingView;
+})());
+
+function __guard__(value, transform) {
+  return (typeof value !== 'undefined' && value !== null) ? transform(value) : undefined;
+}

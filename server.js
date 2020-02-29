@@ -1,28 +1,37 @@
-do (setupLodash = this) ->
-  GLOBAL._ = require 'lodash'
-  _.str = require 'underscore.string'
-  _.mixin _.str.exports()
+/*
+ * decaffeinate suggestions:
+ * DS102: Remove unnecessary code created because of implicit returns
+ * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
+ */
+(function(setupLodash) {
+  GLOBAL._ = require('lodash');
+  _.str = require('underscore.string');
+  return _.mixin(_.str.exports());
+})(this);
 
-express = require 'express'
-http = require 'http'
-log = require 'winston'
-serverSetup = require './server_setup'
-co = require 'co'
-config = require './server_config'
-Promise = require 'bluebird'
+const express = require('express');
+const http = require('http');
+const log = require('winston');
+const serverSetup = require('./server_setup');
+const co = require('co');
+const config = require('./server_config');
+const Promise = require('bluebird');
 
-module.exports.startServer = (done) ->
-  app = createAndConfigureApp()
-  httpServer = http.createServer(app).listen app.get('port'), -> done?()
-  log.info('Express SSL server listening on port ' + app.get('port'))
-  {app, httpServer}
+module.exports.startServer = function(done) {
+  const app = createAndConfigureApp();
+  const httpServer = http.createServer(app).listen(app.get('port'), () => typeof done === 'function' ? done() : undefined);
+  log.info('Express SSL server listening on port ' + app.get('port'));
+  return {app, httpServer};
+};
 
-createAndConfigureApp = module.exports.createAndConfigureApp = ->
+var createAndConfigureApp = (module.exports.createAndConfigureApp = function() {
 
-  app = express()
-  if config.forceCompression
-    compression = require('compression')
-    app.use(compression())
-  serverSetup.setExpressConfigurationOptions app
-  serverSetup.setupMiddleware app
-  app
+  const app = express();
+  if (config.forceCompression) {
+    const compression = require('compression');
+    app.use(compression());
+  }
+  serverSetup.setExpressConfigurationOptions(app);
+  serverSetup.setupMiddleware(app);
+  return app;
+});

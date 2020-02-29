@@ -1,61 +1,92 @@
-require('app/styles/core/hero-select-view.sass')
-CocoView = require 'views/core/CocoView'
-template = require 'templates/core/hero-select-view'
-State = require 'models/State'
-ThangTypeConstants = require 'lib/ThangTypeConstants'
-ThangTypeLib = require 'lib/ThangTypeLib'
-User = require 'models/User'
-api = require 'core/api'
+/*
+ * decaffeinate suggestions:
+ * DS102: Remove unnecessary code created because of implicit returns
+ * DS103: Rewrite code to no longer use __guard__
+ * DS206: Consider reworking classes to avoid initClass
+ * DS207: Consider shorter variations of null checks
+ * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
+ */
+let HeroSelectView;
+require('app/styles/core/hero-select-view.sass');
+const CocoView = require('views/core/CocoView');
+const template = require('templates/core/hero-select-view');
+const State = require('models/State');
+const ThangTypeConstants = require('lib/ThangTypeConstants');
+const ThangTypeLib = require('lib/ThangTypeLib');
+const User = require('models/User');
+const api = require('core/api');
 
-module.exports = class HeroSelectView extends CocoView
-  id: 'hero-select-view'
-  template: template
+module.exports = (HeroSelectView = (function() {
+  HeroSelectView = class HeroSelectView extends CocoView {
+    static initClass() {
+      this.prototype.id = 'hero-select-view';
+      this.prototype.template = template;
+  
+      this.prototype.events =
+        {'click .hero-option': 'onClickHeroOption'};
+    }
 
-  events:
-    'click .hero-option': 'onClickHeroOption'
+    initialize(options) {
+      if (options == null) { options = {}; }
+      this.options = options;
+      const defaultHeroOriginal = ThangTypeConstants.heroes.captain;
+      const currentHeroOriginal = __guard__(me.get('heroConfig'), x => x.thangType) || defaultHeroOriginal;
 
-  initialize: (@options = {}) ->
-    defaultHeroOriginal = ThangTypeConstants.heroes.captain
-    currentHeroOriginal = me.get('heroConfig')?.thangType or defaultHeroOriginal
+      this.debouncedRender = _.debounce(this.render, 0);
 
-    @debouncedRender = _.debounce @render, 0
+      this.state = new State({
+        currentHeroOriginal,
+        selectedHeroOriginal: currentHeroOriginal
+      });
 
-    @state = new State({
-      currentHeroOriginal
-      selectedHeroOriginal: currentHeroOriginal
-    })
+      // @heroes = new ThangTypes({}, { project: ['original', 'name', 'heroClass, 'slug''] })
+      // @supermodel.trackRequest @heroes.fetchHeroes()
 
-    # @heroes = new ThangTypes({}, { project: ['original', 'name', 'heroClass, 'slug''] })
-    # @supermodel.trackRequest @heroes.fetchHeroes()
+      api.thangTypes.getHeroes({ project: ['original', 'name', 'shortName', 'heroClass', 'slug', 'ozaria'] }).then(heroes => {
+        this.heroes = heroes.filter(h => !h.ozaria);
+        return this.debouncedRender();
+      });
 
-    api.thangTypes.getHeroes({ project: ['original', 'name', 'shortName', 'heroClass', 'slug', 'ozaria'] }).then (heroes) =>
-      @heroes = heroes.filter((h) => !h.ozaria)
-      @debouncedRender()
+      return this.listenTo(this.state, 'all', function() { return this.debouncedRender(); });
+    }
+      // @listenTo @heroes, 'all', -> @debouncedRender()
 
-    @listenTo @state, 'all', -> @debouncedRender()
-    # @listenTo @heroes, 'all', -> @debouncedRender()
+    onClickHeroOption(e) {
+      const heroOriginal = $(e.currentTarget).data('hero-original');
+      this.state.set({selectedHeroOriginal: heroOriginal});
+      return this.saveHeroSelection(heroOriginal);
+    }
 
-  onClickHeroOption: (e) ->
-    heroOriginal = $(e.currentTarget).data('hero-original')
-    @state.set selectedHeroOriginal: heroOriginal
-    @saveHeroSelection(heroOriginal)
+    getPortraitURL(hero) {
+      return ThangTypeLib.getPortraitURL(hero);
+    }
 
-  getPortraitURL: (hero) ->
-    ThangTypeLib.getPortraitURL(hero)
+    getHeroShortName(hero) {
+      return ThangTypeLib.getHeroShortName(hero);
+    }
 
-  getHeroShortName: (hero) ->
-    ThangTypeLib.getHeroShortName(hero)
+    saveHeroSelection(heroOriginal) {
+      if (!me.get('heroConfig')) { me.set({heroConfig: {}}); }
+      const heroConfig = _.assign({}, me.get('heroConfig'), { thangType: heroOriginal });
+      me.set({ heroConfig });
 
-  saveHeroSelection: (heroOriginal) ->
-    me.set(heroConfig: {}) unless me.get('heroConfig')
-    heroConfig = _.assign {}, me.get('heroConfig'), { thangType: heroOriginal }
-    me.set({ heroConfig })
+      const hero = _.find(this.heroes, { original: heroOriginal });
+      return me.save().then(() => {
+        let event = 'Hero selected';
+        event += me.isStudent() ? ' student' : ' teacher';
+        if (this.options.createAccount) { event += ' create account'; }
+        const category = me.isStudent() ? 'Students' : 'Teachers';
+        if (window.tracker != null) {
+          window.tracker.trackEvent(event, {category, heroOriginal}, []);
+        }
+        return this.trigger('hero-select:success', {attributes: hero});
+    });
+    }
+  };
+  HeroSelectView.initClass();
+  return HeroSelectView;
+})());
 
-    hero = _.find(@heroes, { original: heroOriginal })
-    me.save().then =>
-      event = 'Hero selected'
-      event += if me.isStudent() then ' student' else ' teacher'
-      event += ' create account' if @options.createAccount
-      category = if me.isStudent() then 'Students' else 'Teachers'
-      window.tracker?.trackEvent event, {category, heroOriginal}, []
-      @trigger 'hero-select:success', {attributes: hero}
+function __guard__(value, transform) {
+  return (typeof value !== 'undefined' && value !== null) ? transform(value) : undefined;
+}

@@ -1,18 +1,40 @@
-require('app/styles/teachers/resource-hub-view.sass')
-RootView = require 'views/core/RootView'
+/*
+ * decaffeinate suggestions:
+ * DS102: Remove unnecessary code created because of implicit returns
+ * DS103: Rewrite code to no longer use __guard__
+ * DS206: Consider reworking classes to avoid initClass
+ * DS207: Consider shorter variations of null checks
+ * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
+ */
+let ResourceHubView;
+require('app/styles/teachers/resource-hub-view.sass');
+const RootView = require('views/core/RootView');
 
-module.exports = class ResourceHubView extends RootView
-  id: 'resource-hub-view'
-  template: require 'templates/teachers/resource-hub-view'
+module.exports = (ResourceHubView = (function() {
+  ResourceHubView = class ResourceHubView extends RootView {
+    static initClass() {
+      this.prototype.id = 'resource-hub-view';
+      this.prototype.template = require('templates/teachers/resource-hub-view');
+  
+      this.prototype.events =
+        {'click .resource-link': 'onClickResourceLink'};
+    }
 
-  events:
-    'click .resource-link': 'onClickResourceLink'
+    getTitle() { return $.i18n.t('teacher.resource_hub'); }
 
-  getTitle: -> return $.i18n.t('teacher.resource_hub')
+    initialize() {
+      return __guard__(me.getClientCreatorPermissions(), x => x.then(() => (typeof this.render === 'function' ? this.render() : undefined)));
+    }
 
-  initialize: ->
-    me.getClientCreatorPermissions()?.then(() => @render?())
+    onClickResourceLink(e) {
+      const link = __guard__($(e.target).closest('a'), x => x.attr('href'));
+      return (window.tracker != null ? window.tracker.trackEvent('Teachers Click Resource Hub Link', { category: 'Teachers', label: link }) : undefined);
+    }
+  };
+  ResourceHubView.initClass();
+  return ResourceHubView;
+})());
 
-  onClickResourceLink: (e) ->
-    link = $(e.target).closest('a')?.attr('href')
-    window.tracker?.trackEvent 'Teachers Click Resource Hub Link', { category: 'Teachers', label: link }
+function __guard__(value, transform) {
+  return (typeof value !== 'undefined' && value !== null) ? transform(value) : undefined;
+}

@@ -1,68 +1,105 @@
-require('app/styles/teachers/starter-license-upsell-view.sass')
-RootView = require 'views/core/RootView'
-State = require 'models/State'
-Products = require 'collections/Products'
-PurchaseStarterLicensesModal = require 'views/teachers/PurchaseStarterLicensesModal'
-TeachersContactModal = require 'views/teachers/TeachersContactModal'
-Courses = require 'collections/Courses'
-utils = require 'core/utils'
+/*
+ * decaffeinate suggestions:
+ * DS102: Remove unnecessary code created because of implicit returns
+ * DS103: Rewrite code to no longer use __guard__
+ * DS206: Consider reworking classes to avoid initClass
+ * DS207: Consider shorter variations of null checks
+ * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
+ */
+let StarterLicenseUpsellView;
+require('app/styles/teachers/starter-license-upsell-view.sass');
+const RootView = require('views/core/RootView');
+const State = require('models/State');
+const Products = require('collections/Products');
+const PurchaseStarterLicensesModal = require('views/teachers/PurchaseStarterLicensesModal');
+const TeachersContactModal = require('views/teachers/TeachersContactModal');
+const Courses = require('collections/Courses');
+const utils = require('core/utils');
 
-{
-  MAX_STARTER_LICENSES
-  STARTER_LICENCE_LENGTH_MONTHS
-  STARTER_LICENSE_COURSE_IDS
+const {
+  MAX_STARTER_LICENSES,
+  STARTER_LICENCE_LENGTH_MONTHS,
+  STARTER_LICENSE_COURSE_IDS,
   FREE_COURSE_IDS
-} = require 'core/constants'
+} = require('core/constants');
 
-module.exports = class StarterLicenseUpsellView extends RootView
-  id: 'starter-license-upsell-view'
-  template: require 'templates/teachers/starter-license-upsell-view'
+module.exports = (StarterLicenseUpsellView = (function() {
+  StarterLicenseUpsellView = class StarterLicenseUpsellView extends RootView {
+    static initClass() {
+      this.prototype.id = 'starter-license-upsell-view';
+      this.prototype.template = require('templates/teachers/starter-license-upsell-view');
+      
+      this.prototype.events = {
+        'click .purchase-btn': 'onClickPurchaseButton',
+        'click .contact-us-btn': 'onClickContactUsButton'
+      };
+    }
 
-  i18nData: ->
-    maxQuantityStarterLicenses: MAX_STARTER_LICENSES
-    starterLicenseLengthMonths: STARTER_LICENCE_LENGTH_MONTHS
-    starterLicenseCourseList: @state.get('starterLicenseCourseList')
-    
-  events:
-    'click .purchase-btn': 'onClickPurchaseButton'
-    'click .contact-us-btn': 'onClickContactUsButton'
+    i18nData() {
+      return {
+        maxQuantityStarterLicenses: MAX_STARTER_LICENSES,
+        starterLicenseLengthMonths: STARTER_LICENCE_LENGTH_MONTHS,
+        starterLicenseCourseList: this.state.get('starterLicenseCourseList')
+      };
+    }
 
-  initialize: (options) ->
-    window.tracker?.trackEvent 'Starter License Upsell: View Opened', category: 'Teachers', ['Mixpanel']
-    @state = new State({
-      dollarsPerStudent: undefined
-    })
-    @products = new Products()
-    @supermodel.trackRequest @products.fetch()
-    @listenTo @products, 'sync', ->
-      centsPerStudent = @products.getByName('starter_license')?.get('amount')
-      @state.set {
-        dollarsPerStudent: centsPerStudent/100
+    initialize(options) {
+      if (window.tracker != null) {
+        window.tracker.trackEvent('Starter License Upsell: View Opened', {category: 'Teachers'}, ['Mixpanel']);
       }
-    @courses = new Courses()
-    @supermodel.trackRequest @courses.fetch()
-    @listenTo @state, 'change', ->
-      @render()
-    # Listen for language change
-    @listenTo me, 'change:preferredLanguage', ->
-      @state.set { starterLicenseCourseList: @getStarterLicenseCourseList() }
-    me.getClientCreatorPermissions()?.then(() => @render?())
+      this.state = new State({
+        dollarsPerStudent: undefined
+      });
+      this.products = new Products();
+      this.supermodel.trackRequest(this.products.fetch());
+      this.listenTo(this.products, 'sync', function() {
+        const centsPerStudent = __guard__(this.products.getByName('starter_license'), x => x.get('amount'));
+        return this.state.set({
+          dollarsPerStudent: centsPerStudent/100
+        });
+    });
+      this.courses = new Courses();
+      this.supermodel.trackRequest(this.courses.fetch());
+      this.listenTo(this.state, 'change', function() {
+        return this.render();
+      });
+      // Listen for language change
+      this.listenTo(me, 'change:preferredLanguage', function() {
+        return this.state.set({ starterLicenseCourseList: this.getStarterLicenseCourseList() });
+    });
+      return __guard__(me.getClientCreatorPermissions(), x => x.then(() => (typeof this.render === 'function' ? this.render() : undefined)));
+    }
       
-  onLoaded: ->
-    @state.set { starterLicenseCourseList: @getStarterLicenseCourseList() }
-    null
+    onLoaded() {
+      this.state.set({ starterLicenseCourseList: this.getStarterLicenseCourseList() });
+      return null;
+    }
       
-  getStarterLicenseCourseList: ->
-    return if !@courses.loaded
-    COURSE_IDS = _.difference(STARTER_LICENSE_COURSE_IDS, FREE_COURSE_IDS)
-    starterLicenseCourseList = _.difference(STARTER_LICENSE_COURSE_IDS, FREE_COURSE_IDS).map (_id) =>
-      utils.i18n(@courses.findWhere({_id})?.attributes, 'name')
-    starterLicenseCourseList.push($.t('general.and') + ' ' + starterLicenseCourseList.pop())
-    starterLicenseCourseList.join(', ')
+    getStarterLicenseCourseList() {
+      if (!this.courses.loaded) { return; }
+      const COURSE_IDS = _.difference(STARTER_LICENSE_COURSE_IDS, FREE_COURSE_IDS);
+      const starterLicenseCourseList = _.difference(STARTER_LICENSE_COURSE_IDS, FREE_COURSE_IDS).map(_id => {
+        return utils.i18n(__guard__(this.courses.findWhere({_id}), x => x.attributes), 'name');
+      });
+      starterLicenseCourseList.push($.t('general.and') + ' ' + starterLicenseCourseList.pop());
+      return starterLicenseCourseList.join(', ');
+    }
 
-  onClickPurchaseButton: ->
-    @openModalView(new PurchaseStarterLicensesModal())
+    onClickPurchaseButton() {
+      return this.openModalView(new PurchaseStarterLicensesModal());
+    }
 
-  onClickContactUsButton: ->
-    window.tracker?.trackEvent 'Classes Starter Licenses Upsell Contact Us', category: 'Teachers', ['Mixpanel']
-    @openModalView(new TeachersContactModal())
+    onClickContactUsButton() {
+      if (window.tracker != null) {
+        window.tracker.trackEvent('Classes Starter Licenses Upsell Contact Us', {category: 'Teachers'}, ['Mixpanel']);
+      }
+      return this.openModalView(new TeachersContactModal());
+    }
+  };
+  StarterLicenseUpsellView.initClass();
+  return StarterLicenseUpsellView;
+})());
+
+function __guard__(value, transform) {
+  return (typeof value !== 'undefined' && value !== null) ? transform(value) : undefined;
+}

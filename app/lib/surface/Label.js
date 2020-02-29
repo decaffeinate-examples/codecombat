@@ -1,246 +1,299 @@
-CocoClass = require 'core/CocoClass'
-createjs = require 'lib/createjs-parts'
+/*
+ * decaffeinate suggestions:
+ * DS101: Remove unnecessary use of Array.from
+ * DS102: Remove unnecessary code created because of implicit returns
+ * DS103: Rewrite code to no longer use __guard__
+ * DS104: Avoid inline assignments
+ * DS206: Consider reworking classes to avoid initClass
+ * DS207: Consider shorter variations of null checks
+ * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
+ */
+let Label;
+const CocoClass = require('core/CocoClass');
+const createjs = require('lib/createjs-parts');
 
-module.exports = class Label extends CocoClass
-  @STYLE_DIALOGUE = 'dialogue'  # A speech bubble from a script
-  @STYLE_SAY = 'say'  # A piece of text generated from the world
-  @STYLE_NAME = 'name'  # A name like Scott set up for the Wizard
-  # We might want to combine 'say' and 'name'; they're very similar
-  # Nick designed 'say' based off of Scott's 'name' back when they were using two systems
-  @STYLE_VAR = 'variable'
-
-  @BITMAP_SPACE = 20 # Size extenstion for speech bubbles for box pointers
-
-  subscriptions: {}
-
-  constructor: (options) ->
-    super()
-    options ?= {}
-    @sprite = options.sprite
-    @camera = options.camera
-    @layer = options.layer
-    @style = options.style ? (@sprite?.thang?.labelStyle || Label.STYLE_SAY)
-    @labelOptions = options.labelOptions ? {}
-    @returnBounds = @labelOptions.returnBounds
-    console.error @toString(), 'needs a sprite.' unless @sprite
-    console.error @toString(), 'needs a camera.' unless @camera
-    console.error @toString(), 'needs a layer.' unless @layer
-    @setText options.text if options.text
-
-  destroy: ->
-    @setText null
-    super()
-
-  toString: -> "<Label for #{@sprite?.thang?.id ? 'None'}: #{@text?.substring(0, 10) ? ''}>"
-
-  setText: (text) ->
-    # Returns whether an update was actually performed
-    return false if text is @text
-    @text = text
-    @build()
-    true
-
-  build: ->
-    if @layer and not @layer.destroyed
-      @layer.removeChild @background if @background
-      @layer.removeChild @label if @label
-    @label = null
-    @background = null
-    return unless @text  # null or '' should both be skipped
-    o = @buildLabelOptions()
-    @layer.addChild @label = @buildLabel o
-    @layer.addChild @background = @buildBackground o
-    @layer.updateLayerOrder()
-
-  update: ->
-    return unless @text and @sprite.sprite
-    offset = @sprite.getOffset? (if @style in ['dialogue', 'say'] then 'mouth' else 'aboveHead')
-    offset ?= { x: 0, y: 0 }  # temp (if not Lank)
-    offset.y += 10 if @style is 'variable'
-    rotation = @sprite.getRotation()
-    offset.x *= -1 if rotation >= 135 or rotation <= -135
-    @label.x = @background.x = @sprite.sprite.x + offset.x
-    @label.y = @background.y = @sprite.sprite.y + offset.y
-    if @returnBounds and @background.bitmapCache and @sprite?.options?.camera
-      cache = @background.bitmapCache
-      camera = @sprite.options.camera
-      width = (@background.bitmapCache.width - Label.BITMAP_SPACE) * @background.scaleX
-      height = (@background.bitmapCache.height - Label.BITMAP_SPACE) * @background.scaleY
-      x = @background.x - @background.regX * @background.scaleX
-      y = @background.y - @background.regY * @background.scaleY
-      posLB = camera.surfaceToWorld({x: x, y: y + height})
-      posRT = camera.surfaceToWorld({x: x + width, y: y})
-      @sprite.thang?.labelBounds = {x1: posLB.x, x2: posRT.x, y1: posLB.y, y2: posRT.y}
-    null
-
-  show: ->
-    return unless @label
-    @layer.addChild @label
-    @layer.addChild @background
-    @layer.updateLayerOrder()
-
-  hide: ->
-    return unless @label
-    @layer.removeChild @background
-    @layer.removeChild @label
-
-  buildLabelOptions: ->
-    o = {}
-    st = {dialogue: 'D', say: 'S', name: 'N', variable: 'V'}[@style]
-    o.marginX = {D: 5, S: 6, N: 3, V: 0}[st]
-    o.marginY = {D: 6, S: 4, N: 3, V: 0}[st]
-    o.fontWeight = {D: 'bold', S: 'bold', N: 'bold', V: 'bold'}[st]
-    o.shadow = {D: false, S: true, N: true, V: true}[st]
-    o.shadowColor = {D: '#FFF', S: '#000', N: '#000', V: "#000"}[st]
-    o.fontSize = {D: 25, S: 12, N: 24, V: 18}[st]
-    o.lineSpacing = 2
-    o.fontFamily = {D: 'Arial', S: 'Arial', N: 'Arial', B: 'Arial', V: 'Arial'}[st]
-    o.textAlign = "left" # it's disabled for customizing on purpose, we don't need it now and need to rework "bubble" forming for that
-    o.fontColor = {D: '#000', S: '#FFF', N: '#6c6', V: '#6c6'}[st]
-    if @style is 'name' and @sprite?.thang?.team is 'humans'
-      o.fontColor = '#c66'
-    else if @style is 'name' and @sprite?.thang?.team is 'ogres'
-      o.fontColor = '#66c'
-    else if @style is 'variable'
-      o.fontColor = '#fff'
-
-    o.backgroundFillColor = {D: 'white', S: 'rgba(0,0,0,0.4)', N: 'rgba(0,0,0,0.7)', V: 'rgba(0,0,0,0.7)'}[st]
-    o.backgroundStrokeColor = {D: 'black', S: 'rgba(0,0,0,0.6)', N: 'rgba(0,0,0,0)', V: 'rgba(0,0,0,0)'}[st]
-    o.backgroundStrokeStyle = {D: 2, S: 1, N: 1, V: 1}[st]
-    o.backgroundBorderRadius = {D: 10, S: 3, N: 3, V: 3}[st]
-    o.layerPriority = {D: 10, S: 5, N: 5, V: 5}[st]
-    o.maxWidth = {D: 300, S: 300, N: 180, V: 100}[st]
-    o.maxWidth = Math.max @camera.canvasWidth / 2 - 100, o.maxWidth
-    o.maxLength = {D: 100, S: 100, N: 30, V: 30}[st]
-    o = _.merge(o, @labelOptions)
-    o.fontDescriptor = "#{o.fontWeight} #{o.fontSize}px #{o.fontFamily}"
-    multiline = @addNewLinesToText _.string.prune(@text, o.maxLength), o.fontDescriptor, o.maxWidth
-    o.text = multiline.text
-    o.textWidth = multiline.textWidth
-    o
-
-  buildLabel: (o) ->
-    label = new createjs.Text o.text, o.fontDescriptor, o.fontColor
-    label.lineHeight = o.fontSize + o.lineSpacing
-    label.x = o.marginX
-    label.y = o.marginY
-    label.textAlign = o.textAlign
-    label.shadow = new createjs.Shadow o.shadowColor, 1, 1, 0 if o.shadow
-    label.layerPriority = o.layerPriority
-    label.name = "Sprite Label - #{@style}"
-    bounds = label.getBounds()
-    label.cache(bounds.x, bounds.y, bounds.width, bounds.height)
-    o.textHeight = label.getMeasuredHeight()
-    o.label = label
-    label
-
-  buildBackground: (o) ->
-    w = o.textWidth + 2 * o.marginX
-    h = o.textHeight + 2 * o.marginY + 1  # Is this +1 needed?
-
-    background = new createjs.Shape()
-    background.name = "Sprite Label Background - #{@style}"
-    g = background.graphics
-    g.beginFill o.backgroundFillColor
-    g.beginStroke o.backgroundStrokeColor
-    g.setStrokeStyle o.backgroundStrokeStyle
-
-    radius = o.backgroundBorderRadius  # Rounded rectangle border radius
-    pointerHeight = 10  # Height of pointer triangle
-    pointerWidth = 8  # Actual width of pointer triangle
-    pointerWidth += radius  # Convenience value including pointer width and border radius
+module.exports = (Label = (function() {
+  Label = class Label extends CocoClass {
+    static initClass() {
+      this.STYLE_DIALOGUE = 'dialogue';  // A speech bubble from a script
+      this.STYLE_SAY = 'say';  // A piece of text generated from the world
+      this.STYLE_NAME = 'name';  // A name like Scott set up for the Wizard
+      // We might want to combine 'say' and 'name'; they're very similar
+      // Nick designed 'say' based off of Scott's 'name' back when they were using two systems
+      this.STYLE_VAR = 'variable';
   
-    if @style is 'dialogue' and not o.withoutPointer
-      # Figure out the position of the pointer for the bubble
-      sup = x: @sprite.sprite.x, y: @sprite.sprite.y  # a little more accurate to aim for mouth--how?
-      cap = @camera.surfaceToCanvas sup
-      o.hPos = if cap.x / @camera.canvasWidth > 0.53 then 'right' else 'left'
-      o.vPos = if cap.y / @camera.canvasHeight > 0.53 then 'bottom' else 'top'
-      pointerPos = "#{o.vPos}-#{o.hPos}"
-      # TODO: we should redo this when the Thang moves enough, not just when we change its text
-      #return if pointerPos is @lastBubblePos and blurb is @lastBlurb
+      this.BITMAP_SPACE = 20; // Size extenstion for speech bubbles for box pointers
+  
+      this.prototype.subscriptions = {};
+    }
 
-      # Draw a rounded rectangle with the pointer coming out of it
-      g.moveTo(radius, 0)
-      if pointerPos is 'top-left'
-        g.lineTo(radius / 2, -pointerHeight)
-        g.lineTo(pointerWidth, 0)
-      else if pointerPos is 'top-right'
-        g.lineTo(w - pointerWidth, 0)
-        g.lineTo(w - radius / 2, -pointerHeight)
+    constructor(options) {
+      super();
+      if (options == null) { options = {}; }
+      this.sprite = options.sprite;
+      this.camera = options.camera;
+      this.layer = options.layer;
+      this.style = options.style != null ? options.style : (__guard__(this.sprite != null ? this.sprite.thang : undefined, x => x.labelStyle) || Label.STYLE_SAY);
+      this.labelOptions = options.labelOptions != null ? options.labelOptions : {};
+      this.returnBounds = this.labelOptions.returnBounds;
+      if (!this.sprite) { console.error(this.toString(), 'needs a sprite.'); }
+      if (!this.camera) { console.error(this.toString(), 'needs a camera.'); }
+      if (!this.layer) { console.error(this.toString(), 'needs a layer.'); }
+      if (options.text) { this.setText(options.text); }
+    }
 
-      # Draw top and right edges
-      g.lineTo(w - radius, 0)
-      g.quadraticCurveTo(w, 0, w, radius)
-      g.lineTo(w, h - radius)
-      g.quadraticCurveTo(w, h, w - radius, h)
+    destroy() {
+      this.setText(null);
+      return super.destroy();
+    }
 
-      if pointerPos is 'bottom-right'
-        g.lineTo(w - radius / 2, h + pointerHeight)
-        g.lineTo(w - pointerWidth, h)
-      else if pointerPos is 'bottom-left'
-        g.lineTo(pointerWidth, h)
-        g.lineTo(radius / 2, h + pointerHeight)
+    toString() { let left;
+    return `<Label for ${__guard__(this.sprite != null ? this.sprite.thang : undefined, x => x.id) != null ? __guard__(this.sprite != null ? this.sprite.thang : undefined, x => x.id) : 'None'}: ${(left = (this.text != null ? this.text.substring(0, 10) : undefined)) != null ? left : ''}>`; }
 
-      # Draw bottom and left edges
-      g.lineTo(radius, h)
-      g.quadraticCurveTo(0, h, 0, h - radius)
-      g.lineTo(0, radius)
-      g.quadraticCurveTo(0, 0, radius, 0)
-    else
-      # Just draw a rounded rectangle
-      o.hpos ?= "middle"
-      o.vPos ?= "middle"
-      pointerHeight = 0
-      g.drawRoundRect(o.label.x - o.marginX, o.label.y - o.marginY, w, h, o.backgroundBorderRadius)
+    setText(text) {
+      // Returns whether an update was actually performed
+      if (text === this.text) { return false; }
+      this.text = text;
+      this.build();
+      return true;
+    }
+
+    build() {
+      if (this.layer && !this.layer.destroyed) {
+        if (this.background) { this.layer.removeChild(this.background); }
+        if (this.label) { this.layer.removeChild(this.label); }
+      }
+      this.label = null;
+      this.background = null;
+      if (!this.text) { return; }  // null or '' should both be skipped
+      const o = this.buildLabelOptions();
+      this.layer.addChild(this.label = this.buildLabel(o));
+      this.layer.addChild(this.background = this.buildBackground(o));
+      return this.layer.updateLayerOrder();
+    }
+
+    update() {
+      if (!this.text || !this.sprite.sprite) { return; }
+      let offset = typeof this.sprite.getOffset === 'function' ? this.sprite.getOffset((['dialogue', 'say'].includes(this.style) ? 'mouth' : 'aboveHead')) : undefined;
+      if (offset == null) { offset = { x: 0, y: 0 }; }  // temp (if not Lank)
+      if (this.style === 'variable') { offset.y += 10; }
+      const rotation = this.sprite.getRotation();
+      if ((rotation >= 135) || (rotation <= -135)) { offset.x *= -1; }
+      this.label.x = (this.background.x = this.sprite.sprite.x + offset.x);
+      this.label.y = (this.background.y = this.sprite.sprite.y + offset.y);
+      if (this.returnBounds && this.background.bitmapCache && __guard__(this.sprite != null ? this.sprite.options : undefined, x1 => x1.camera)) {
+        const cache = this.background.bitmapCache;
+        const {
+          camera
+        } = this.sprite.options;
+        const width = (this.background.bitmapCache.width - Label.BITMAP_SPACE) * this.background.scaleX;
+        const height = (this.background.bitmapCache.height - Label.BITMAP_SPACE) * this.background.scaleY;
+        const x = this.background.x - (this.background.regX * this.background.scaleX);
+        const y = this.background.y - (this.background.regY * this.background.scaleY);
+        const posLB = camera.surfaceToWorld({x, y: y + height});
+        const posRT = camera.surfaceToWorld({x: x + width, y});
+        if (this.sprite.thang != null) {
+          this.sprite.thang.labelBounds = {x1: posLB.x, x2: posRT.x, y1: posLB.y, y2: posRT.y};
+        }
+      }
+      return null;
+    }
+
+    show() {
+      if (!this.label) { return; }
+      this.layer.addChild(this.label);
+      this.layer.addChild(this.background);
+      return this.layer.updateLayerOrder();
+    }
+
+    hide() {
+      if (!this.label) { return; }
+      this.layer.removeChild(this.background);
+      return this.layer.removeChild(this.label);
+    }
+
+    buildLabelOptions() {
+      let o = {};
+      const st = {dialogue: 'D', say: 'S', name: 'N', variable: 'V'}[this.style];
+      o.marginX = {D: 5, S: 6, N: 3, V: 0}[st];
+      o.marginY = {D: 6, S: 4, N: 3, V: 0}[st];
+      o.fontWeight = {D: 'bold', S: 'bold', N: 'bold', V: 'bold'}[st];
+      o.shadow = {D: false, S: true, N: true, V: true}[st];
+      o.shadowColor = {D: '#FFF', S: '#000', N: '#000', V: "#000"}[st];
+      o.fontSize = {D: 25, S: 12, N: 24, V: 18}[st];
+      o.lineSpacing = 2;
+      o.fontFamily = {D: 'Arial', S: 'Arial', N: 'Arial', B: 'Arial', V: 'Arial'}[st];
+      o.textAlign = "left"; // it's disabled for customizing on purpose, we don't need it now and need to rework "bubble" forming for that
+      o.fontColor = {D: '#000', S: '#FFF', N: '#6c6', V: '#6c6'}[st];
+      if ((this.style === 'name') && (__guard__(this.sprite != null ? this.sprite.thang : undefined, x => x.team) === 'humans')) {
+        o.fontColor = '#c66';
+      } else if ((this.style === 'name') && (__guard__(this.sprite != null ? this.sprite.thang : undefined, x1 => x1.team) === 'ogres')) {
+        o.fontColor = '#66c';
+      } else if (this.style === 'variable') {
+        o.fontColor = '#fff';
+      }
+
+      o.backgroundFillColor = {D: 'white', S: 'rgba(0,0,0,0.4)', N: 'rgba(0,0,0,0.7)', V: 'rgba(0,0,0,0.7)'}[st];
+      o.backgroundStrokeColor = {D: 'black', S: 'rgba(0,0,0,0.6)', N: 'rgba(0,0,0,0)', V: 'rgba(0,0,0,0)'}[st];
+      o.backgroundStrokeStyle = {D: 2, S: 1, N: 1, V: 1}[st];
+      o.backgroundBorderRadius = {D: 10, S: 3, N: 3, V: 3}[st];
+      o.layerPriority = {D: 10, S: 5, N: 5, V: 5}[st];
+      o.maxWidth = {D: 300, S: 300, N: 180, V: 100}[st];
+      o.maxWidth = Math.max((this.camera.canvasWidth / 2) - 100, o.maxWidth);
+      o.maxLength = {D: 100, S: 100, N: 30, V: 30}[st];
+      o = _.merge(o, this.labelOptions);
+      o.fontDescriptor = `${o.fontWeight} ${o.fontSize}px ${o.fontFamily}`;
+      const multiline = this.addNewLinesToText(_.string.prune(this.text, o.maxLength), o.fontDescriptor, o.maxWidth);
+      o.text = multiline.text;
+      o.textWidth = multiline.textWidth;
+      return o;
+    }
+
+    buildLabel(o) {
+      const label = new createjs.Text(o.text, o.fontDescriptor, o.fontColor);
+      label.lineHeight = o.fontSize + o.lineSpacing;
+      label.x = o.marginX;
+      label.y = o.marginY;
+      label.textAlign = o.textAlign;
+      if (o.shadow) { label.shadow = new createjs.Shadow(o.shadowColor, 1, 1, 0); }
+      label.layerPriority = o.layerPriority;
+      label.name = `Sprite Label - ${this.style}`;
+      const bounds = label.getBounds();
+      label.cache(bounds.x, bounds.y, bounds.width, bounds.height);
+      o.textHeight = label.getMeasuredHeight();
+      o.label = label;
+      return label;
+    }
+
+    buildBackground(o) {
+      const w = o.textWidth + (2 * o.marginX);
+      const h = o.textHeight + (2 * o.marginY) + 1;  // Is this +1 needed?
+
+      const background = new createjs.Shape();
+      background.name = `Sprite Label Background - ${this.style}`;
+      const g = background.graphics;
+      g.beginFill(o.backgroundFillColor);
+      g.beginStroke(o.backgroundStrokeColor);
+      g.setStrokeStyle(o.backgroundStrokeStyle);
+
+      const radius = o.backgroundBorderRadius;  // Rounded rectangle border radius
+      let pointerHeight = 10;  // Height of pointer triangle
+      let pointerWidth = 8;  // Actual width of pointer triangle
+      pointerWidth += radius;  // Convenience value including pointer width and border radius
+  
+      if ((this.style === 'dialogue') && !o.withoutPointer) {
+        // Figure out the position of the pointer for the bubble
+        const sup = {x: this.sprite.sprite.x, y: this.sprite.sprite.y};  // a little more accurate to aim for mouth--how?
+        const cap = this.camera.surfaceToCanvas(sup);
+        o.hPos = (cap.x / this.camera.canvasWidth) > 0.53 ? 'right' : 'left';
+        o.vPos = (cap.y / this.camera.canvasHeight) > 0.53 ? 'bottom' : 'top';
+        const pointerPos = `${o.vPos}-${o.hPos}`;
+        // TODO: we should redo this when the Thang moves enough, not just when we change its text
+        //return if pointerPos is @lastBubblePos and blurb is @lastBlurb
+
+        // Draw a rounded rectangle with the pointer coming out of it
+        g.moveTo(radius, 0);
+        if (pointerPos === 'top-left') {
+          g.lineTo(radius / 2, -pointerHeight);
+          g.lineTo(pointerWidth, 0);
+        } else if (pointerPos === 'top-right') {
+          g.lineTo(w - pointerWidth, 0);
+          g.lineTo(w - (radius / 2), -pointerHeight);
+        }
+
+        // Draw top and right edges
+        g.lineTo(w - radius, 0);
+        g.quadraticCurveTo(w, 0, w, radius);
+        g.lineTo(w, h - radius);
+        g.quadraticCurveTo(w, h, w - radius, h);
+
+        if (pointerPos === 'bottom-right') {
+          g.lineTo(w - (radius / 2), h + pointerHeight);
+          g.lineTo(w - pointerWidth, h);
+        } else if (pointerPos === 'bottom-left') {
+          g.lineTo(pointerWidth, h);
+          g.lineTo(radius / 2, h + pointerHeight);
+        }
+
+        // Draw bottom and left edges
+        g.lineTo(radius, h);
+        g.quadraticCurveTo(0, h, 0, h - radius);
+        g.lineTo(0, radius);
+        g.quadraticCurveTo(0, 0, radius, 0);
+      } else {
+        // Just draw a rounded rectangle
+        if (o.hpos == null) { o.hpos = "middle"; }
+        if (o.vPos == null) { o.vPos = "middle"; }
+        pointerHeight = 0;
+        g.drawRoundRect(o.label.x - o.marginX, o.label.y - o.marginY, w, h, o.backgroundBorderRadius);
+      }
     
-    background.regX = w / 2
-    background.regY = h + 2  # Just above health bar, say
+      background.regX = w / 2;
+      background.regY = h + 2;  // Just above health bar, say
     
-    # Center the container where the mouth of the speaker will be
-    if o.hPos is "left"
-      background.regX = 3
-    else if o.hPos is "right"
-      background.regX = o.textWidth + 3
-    if o.vPos is "bottom"
-      background.regY = h + pointerHeight
-    else if o.vPos is "top"
-      background.regY = -pointerHeight
+      // Center the container where the mouth of the speaker will be
+      if (o.hPos === "left") {
+        background.regX = 3;
+      } else if (o.hPos === "right") {
+        background.regX = o.textWidth + 3;
+      }
+      if (o.vPos === "bottom") {
+        background.regY = h + pointerHeight;
+      } else if (o.vPos === "top") {
+        background.regY = -pointerHeight;
+      }
 
-    o.label.regX = background.regX - o.marginX
-    o.label.regY = background.regY - o.marginY
-    space = Label.BITMAP_SPACE
-    offset = -1 * space / 2
-    background.cache(offset, offset, w + space, h + space)
+      o.label.regX = background.regX - o.marginX;
+      o.label.regY = background.regY - o.marginY;
+      const space = Label.BITMAP_SPACE;
+      const offset = (-1 * space) / 2;
+      background.cache(offset, offset, w + space, h + space);
 
-    g.endStroke()
-    g.endFill()
-    background.layerPriority = o.layerPriority - 1
-    background
+      g.endStroke();
+      g.endFill();
+      background.layerPriority = o.layerPriority - 1;
+      return background;
+    }
 
-  addNewLinesToText: (originalText, fontDescriptor, maxWidth=400) ->
-    rows = []
-    row = []
-    words = _.string.words originalText
-    textWidth = 0
-    for word in words
-      row.push(word)
-      text = new createjs.Text(_.string.join(' ', row...), fontDescriptor, '#000')
-      width = text.getMeasuredWidth()
-      if width > maxWidth
-        if row.length is 1 # one long word, truncate it
-          row[0] = _.string.truncate(row[0], 40)
-          text.text = row[0]
-          textWidth = Math.max(text.getMeasuredWidth(), textWidth)
-          rows.push(row)
-          row = []
-        else
-          row.pop()
-          rows.push(row)
-          row = [word]
-      else
-        textWidth = Math.max(textWidth, width)
-    rows.push(row) if row.length
-    for row, i in rows
-      rows[i] = _.string.join(' ', row...)
-    text: _.string.join("\n", rows...), textWidth: textWidth
+    addNewLinesToText(originalText, fontDescriptor, maxWidth) {
+      let text;
+      if (maxWidth == null) { maxWidth = 400; }
+      const rows = [];
+      let row = [];
+      const words = _.string.words(originalText);
+      let textWidth = 0;
+      for (let word of Array.from(words)) {
+        row.push(word);
+        text = new createjs.Text(_.string.join(' ', ...Array.from(row)), fontDescriptor, '#000');
+        const width = text.getMeasuredWidth();
+        if (width > maxWidth) {
+          if (row.length === 1) { // one long word, truncate it
+            row[0] = _.string.truncate(row[0], 40);
+            text.text = row[0];
+            textWidth = Math.max(text.getMeasuredWidth(), textWidth);
+            rows.push(row);
+            row = [];
+          } else {
+            row.pop();
+            rows.push(row);
+            row = [word];
+          }
+        } else {
+          textWidth = Math.max(textWidth, width);
+        }
+      }
+      if (row.length) { rows.push(row); }
+      for (let i = 0; i < rows.length; i++) {
+        row = rows[i];
+        rows[i] = _.string.join(' ', ...Array.from(row));
+      }
+      return {text: _.string.join("\n", ...Array.from(rows)), textWidth};
+    }
+  };
+  Label.initClass();
+  return Label;
+})());
+
+function __guard__(value, transform) {
+  return (typeof value !== 'undefined' && value !== null) ? transform(value) : undefined;
+}

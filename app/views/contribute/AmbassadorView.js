@@ -1,18 +1,34 @@
-ContributeClassView = require './ContributeClassView'
-template = require 'templates/contribute/ambassador'
-{me} = require 'core/auth'
-ContactModal = require 'views/core/ContactModal'
+/*
+ * decaffeinate suggestions:
+ * DS102: Remove unnecessary code created because of implicit returns
+ * DS206: Consider reworking classes to avoid initClass
+ * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
+ */
+let AmbassadorView;
+const ContributeClassView = require('./ContributeClassView');
+const template = require('templates/contribute/ambassador');
+const {me} = require('core/auth');
+const ContactModal = require('views/core/ContactModal');
 
-module.exports = class AmbassadorView extends ContributeClassView
-  id: 'ambassador-view'
-  template: template
-  
-  events:
-    'click [data-toggle="coco-modal"][data-target="core/ContactModal"]': 'openContactModal'
+module.exports = (AmbassadorView = (function() {
+  AmbassadorView = class AmbassadorView extends ContributeClassView {
+    static initClass() {
+      this.prototype.id = 'ambassador-view';
+      this.prototype.template = template;
+    
+      this.prototype.events =
+        {'click [data-toggle="coco-modal"][data-target="core/ContactModal"]': 'openContactModal'};
+    }
 
-  initialize: ->
-    @contributorClassName = 'ambassador'
+    initialize() {
+      return this.contributorClassName = 'ambassador';
+    }
 
-  openContactModal: (e) ->
-    e.stopPropagation()
-    @openModalView new ContactModal()
+    openContactModal(e) {
+      e.stopPropagation();
+      return this.openModalView(new ContactModal());
+    }
+  };
+  AmbassadorView.initClass();
+  return AmbassadorView;
+})());

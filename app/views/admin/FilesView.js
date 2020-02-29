@@ -1,8 +1,21 @@
-RootComponent = require 'views/core/RootComponent'
-template = require 'templates/base-flat'
-FilesComponent = require('./FilesComponent.vue').default
+/*
+ * decaffeinate suggestions:
+ * DS206: Consider reworking classes to avoid initClass
+ * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
+ */
+let FilesView;
+const RootComponent = require('views/core/RootComponent');
+const template = require('templates/base-flat');
+const FilesComponent = require('./FilesComponent.vue').default;
 
-module.exports = class FilesView extends RootComponent
-  id: 'files-view'
-  template: template
-  VueComponent: FilesComponent
+module.exports = (FilesView = (function() {
+  FilesView = class FilesView extends RootComponent {
+    static initClass() {
+      this.prototype.id = 'files-view';
+      this.prototype.template = template;
+      this.prototype.VueComponent = FilesComponent;
+    }
+  };
+  FilesView.initClass();
+  return FilesView;
+})());

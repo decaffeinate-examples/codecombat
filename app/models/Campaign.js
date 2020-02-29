@@ -1,71 +1,102 @@
-CocoModel = require './CocoModel'
-schema = require 'schemas/models/campaign.schema'
-Level = require 'models/Level'
-Levels = require 'collections/Levels'
-CocoCollection = require 'collections/CocoCollection'
-utils = require '../core/utils'
+/*
+ * decaffeinate suggestions:
+ * DS101: Remove unnecessary use of Array.from
+ * DS102: Remove unnecessary code created because of implicit returns
+ * DS206: Consider reworking classes to avoid initClass
+ * DS207: Consider shorter variations of null checks
+ * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
+ */
+let Campaign;
+const CocoModel = require('./CocoModel');
+const schema = require('schemas/models/campaign.schema');
+const Level = require('models/Level');
+const Levels = require('collections/Levels');
+const CocoCollection = require('collections/CocoCollection');
+const utils = require('../core/utils');
 
-module.exports = class Campaign extends CocoModel
-  @className: 'Campaign'
-  @schema: schema
-  urlRoot: '/db/campaign'
-  @denormalizedLevelProperties: _.keys(_.omit(schema.properties.levels.additionalProperties.properties, ['position', 'rewards', 'first', 'nextLevels']))
-  @denormalizedCampaignProperties: ['name', 'i18n', 'slug']
+module.exports = (Campaign = (function() {
+  Campaign = class Campaign extends CocoModel {
+    static initClass() {
+      this.className = 'Campaign';
+      this.schema = schema;
+      this.prototype.urlRoot = '/db/campaign';
+      this.denormalizedLevelProperties = _.keys(_.omit(schema.properties.levels.additionalProperties.properties, ['position', 'rewards', 'first', 'nextLevels']));
+      this.denormalizedCampaignProperties = ['name', 'i18n', 'slug'];
+    }
 
-  initialize: (options = {}) ->
-    @forceCourseNumbering = options.forceCourseNumbering
-    super(arguments...)
+    initialize(options) {
+      if (options == null) { options = {}; }
+      this.forceCourseNumbering = options.forceCourseNumbering;
+      return super.initialize(...arguments);
+    }
     
-  @getLevels: (campaign) ->
-    levels = campaign.levels
-    levels = _.sortBy(levels, 'campaignIndex')
-    return levels
+    static getLevels(campaign) {
+      let {
+        levels
+      } = campaign;
+      levels = _.sortBy(levels, 'campaignIndex');
+      return levels;
+    }
 
-  getLevels: ->
-    return new Levels(Campaign.getLevels(@toJSON()))
+    getLevels() {
+      return new Levels(Campaign.getLevels(this.toJSON()));
+    }
 
-  getNonLadderLevels: ->
-    levels = new Levels(_.values(@get('levels')))
-    levels.reset(levels.reject (level) -> level.isLadder())
-    levels.comparator = 'campaignIndex'
-    levels.sort()
-    return levels
+    getNonLadderLevels() {
+      const levels = new Levels(_.values(this.get('levels')));
+      levels.reset(levels.reject(level => level.isLadder()));
+      levels.comparator = 'campaignIndex';
+      levels.sort();
+      return levels;
+    }
     
-  @getLevelNumberMap: (campaign, forceCourseNumbering) ->
-    levels = []
-    for level in @getLevels(campaign)
-      continue unless level.original
-      practice = @levelIsPractice(level, (campaign.type is 'course') or forceCourseNumbering)
-      assessment = @levelIsAssessment level
-      levels.push({key: level.original, practice, assessment})
-    return utils.createLevelNumberMap(levels)
+    static getLevelNumberMap(campaign, forceCourseNumbering) {
+      const levels = [];
+      for (let level of Array.from(this.getLevels(campaign))) {
+        if (!level.original) { continue; }
+        const practice = this.levelIsPractice(level, (campaign.type === 'course') || forceCourseNumbering);
+        const assessment = this.levelIsAssessment(level);
+        levels.push({key: level.original, practice, assessment});
+      }
+      return utils.createLevelNumberMap(levels);
+    }
 
-  getLevelNameMap: () ->
-    levelNameMap = {}
-    @getLevels().models.map((l) => levelNameMap[l.get('original')] = utils.i18n(l.attributes, 'name'))
-    return levelNameMap
+    getLevelNameMap() {
+      const levelNameMap = {};
+      this.getLevels().models.map(l => { return levelNameMap[l.get('original')] = utils.i18n(l.attributes, 'name'); });
+      return levelNameMap;
+    }
 
-  getLevelNumber: (levelID, defaultNumber) ->
-    @levelNumberMap ?= Campaign.getLevelNumberMap(@attributes)
-    @levelNumberMap[levelID] ? defaultNumber
+    getLevelNumber(levelID, defaultNumber) {
+      if (this.levelNumberMap == null) { this.levelNumberMap = Campaign.getLevelNumberMap(this.attributes); }
+      return this.levelNumberMap[levelID] != null ? this.levelNumberMap[levelID] : defaultNumber;
+    }
     
-  @levelIsPractice: (level, forceCourseNumbering) ->
-    # Migration: in home version, only treat levels explicitly labeled as "Level Name A", "Level Name B", etc. as practice levels
-    # See: https://github.com/codecombat/codecombat/commit/296d2c940d8ecd729d098e45e203e2b1182ff86a
-    if forceCourseNumbering
-      return level.practice
-    else
-      return level.practice and / [ABCD]$/.test level.name
+    static levelIsPractice(level, forceCourseNumbering) {
+      // Migration: in home version, only treat levels explicitly labeled as "Level Name A", "Level Name B", etc. as practice levels
+      // See: https://github.com/codecombat/codecombat/commit/296d2c940d8ecd729d098e45e203e2b1182ff86a
+      if (forceCourseNumbering) {
+        return level.practice;
+      } else {
+        return level.practice && / [ABCD]$/.test(level.name);
+      }
+    }
 
-  levelIsPractice: (level) ->
-    level = level.attributes if level.attributes
-    return Campaign.levelIsPractice(level, @get('type') is 'course' or @forceCourseNumbering)
+    levelIsPractice(level) {
+      if (level.attributes) { level = level.attributes; }
+      return Campaign.levelIsPractice(level, (this.get('type') === 'course') || this.forceCourseNumbering);
+    }
   
-  levelIsAssessment: (level) ->
-    level = level.attributes if level.attributes
-    return Campaign.levelIsAssessment(level)
+    levelIsAssessment(level) {
+      if (level.attributes) { level = level.attributes; }
+      return Campaign.levelIsAssessment(level);
+    }
     
-  @levelIsAssessment: (level) -> level.assessment
+    static levelIsAssessment(level) { return level.assessment; }
     
 
-  updateI18NCoverage: -> super(_.omit(@attributes, 'levels'))
+    updateI18NCoverage() { return super.updateI18NCoverage(_.omit(this.attributes, 'levels')); }
+  };
+  Campaign.initClass();
+  return Campaign;
+})());

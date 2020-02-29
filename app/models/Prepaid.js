@@ -1,70 +1,114 @@
-CocoModel = require './CocoModel'
-schema = require 'schemas/models/prepaid.schema'
+/*
+ * decaffeinate suggestions:
+ * DS101: Remove unnecessary use of Array.from
+ * DS102: Remove unnecessary code created because of implicit returns
+ * DS103: Rewrite code to no longer use __guard__
+ * DS104: Avoid inline assignments
+ * DS204: Change includes calls to have a more natural evaluation order
+ * DS206: Consider reworking classes to avoid initClass
+ * DS207: Consider shorter variations of null checks
+ * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
+ */
+let Prepaid;
+const CocoModel = require('./CocoModel');
+const schema = require('schemas/models/prepaid.schema');
 
-{ STARTER_LICENSE_COURSE_IDS } = require 'core/constants'
+const { STARTER_LICENSE_COURSE_IDS } = require('core/constants');
 
-module.exports = class Prepaid extends CocoModel
-  @className: "Prepaid"
-  urlRoot: '/db/prepaid'
+module.exports = (Prepaid = (function() {
+  Prepaid = class Prepaid extends CocoModel {
+    static initClass() {
+      this.className = "Prepaid";
+      this.prototype.urlRoot = '/db/prepaid';
+    }
 
-  openSpots: ->
-    return @get('maxRedeemers') - @get('redeemers')?.length if @get('redeemers')?
-    @get('maxRedeemers')
+    openSpots() {
+      if (this.get('redeemers') != null) { return this.get('maxRedeemers') - __guard__(this.get('redeemers'), x => x.length); }
+      return this.get('maxRedeemers');
+    }
   
-  usedSpots: ->
-    _.size(@get('redeemers'))
+    usedSpots() {
+      return _.size(this.get('redeemers'));
+    }
 
-  totalSpots: ->
-    return @get('maxRedeemers')
+    totalSpots() {
+      return this.get('maxRedeemers');
+    }
 
-  userHasRedeemed: (userID) ->
-    for redeemer in @get('redeemers')
-      return redeemer.date if redeemer.userID is userID
-    return null
+    userHasRedeemed(userID) {
+      for (let redeemer of Array.from(this.get('redeemers'))) {
+        if (redeemer.userID === userID) { return redeemer.date; }
+      }
+      return null;
+    }
 
-  initialize: ->
-    @listenTo @, 'add', ->
-      maxRedeemers = @get('maxRedeemers')
-      if _.isString(maxRedeemers)
-        @set 'maxRedeemers', parseInt(maxRedeemers)
-    super(arguments...)
+    initialize() {
+      this.listenTo(this, 'add', function() {
+        const maxRedeemers = this.get('maxRedeemers');
+        if (_.isString(maxRedeemers)) {
+          return this.set('maxRedeemers', parseInt(maxRedeemers));
+        }
+      });
+      return super.initialize(...arguments);
+    }
         
-  status: ->
-    endDate = @get('endDate')
-    if endDate and new Date(endDate) < new Date()
-      return 'expired'
+    status() {
+      const endDate = this.get('endDate');
+      if (endDate && (new Date(endDate) < new Date())) {
+        return 'expired';
+      }
 
-    startDate = @get('startDate')
-    if startDate and new Date(startDate) > new Date()
-      return 'pending'
+      const startDate = this.get('startDate');
+      if (startDate && (new Date(startDate) > new Date())) {
+        return 'pending';
+      }
       
-    if @openSpots() <= 0
-      return 'empty'
+      if (this.openSpots() <= 0) {
+        return 'empty';
+      }
       
-    return 'available'
+      return 'available';
+    }
 
-  redeem: (user, options={}) ->
-    options.url = _.result(@, 'url')+'/redeemers'
-    options.type = 'POST'
-    options.data ?= {}
-    options.data.userID = user.id or user
-    @fetch(options)
+    redeem(user, options) {
+      if (options == null) { options = {}; }
+      options.url = _.result(this, 'url')+'/redeemers';
+      options.type = 'POST';
+      if (options.data == null) { options.data = {}; }
+      options.data.userID = user.id || user;
+      return this.fetch(options);
+    }
 
-  includesCourse: (course) ->
-    courseID = course.get?('name') or course
-    if @get('type') is 'starter_license'
-      return courseID in (@get('includedCourseIDs') ? [])
-    else
-      return true
+    includesCourse(course) {
+      const courseID = (typeof course.get === 'function' ? course.get('name') : undefined) || course;
+      if (this.get('type') === 'starter_license') {
+        let left, needle;
+        return (needle = courseID, Array.from(((left = this.get('includedCourseIDs')) != null ? left : [])).includes(needle));
+      } else {
+        return true;
+      }
+    }
 
-  revoke: (user, options={}) ->
-    options.url = _.result(@, 'url')+'/redeemers'
-    options.type = 'DELETE'
-    options.data ?= {}
-    options.data.userID = user.id or user
-    @fetch(options)
+    revoke(user, options) {
+      if (options == null) { options = {}; }
+      options.url = _.result(this, 'url')+'/redeemers';
+      options.type = 'DELETE';
+      if (options.data == null) { options.data = {}; }
+      options.data.userID = user.id || user;
+      return this.fetch(options);
+    }
 
-  hasBeenUsedByTeacher: (userID) ->
-    if @get('creator') is userID and _.detect(@get('redeemers'), { teacherID: undefined })
-      return true
-    _.detect(@get('redeemers'), { teacherID: userID })
+    hasBeenUsedByTeacher(userID) {
+      if ((this.get('creator') === userID) && _.detect(this.get('redeemers'), { teacherID: undefined })) {
+        return true;
+      }
+      return _.detect(this.get('redeemers'), { teacherID: userID });
+    }
+  };
+  Prepaid.initClass();
+  return Prepaid;
+})());
+
+function __guard__(value, transform) {
+  return (typeof value !== 'undefined' && value !== null) ? transform(value) : undefined;
+}

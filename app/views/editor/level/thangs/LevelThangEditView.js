@@ -1,99 +1,144 @@
-require('app/styles/editor/level/thang/level-thang-edit-view.sass')
-CocoView = require 'views/core/CocoView'
-template = require 'templates/editor/level/thang/level-thang-edit-view'
-ThangComponentsEditView = require 'views/editor/component/ThangComponentsEditView'
-ThangType = require 'models/ThangType'
-ace = require('lib/aceContainer')
-require('vendor/scripts/jquery-ui-1.11.1.custom')
-require('vendor/styles/jquery-ui-1.11.1.custom.css')
+/*
+ * decaffeinate suggestions:
+ * DS001: Remove Babel/TypeScript constructor workaround
+ * DS101: Remove unnecessary use of Array.from
+ * DS102: Remove unnecessary code created because of implicit returns
+ * DS205: Consider reworking code to avoid use of IIFEs
+ * DS206: Consider reworking classes to avoid initClass
+ * DS207: Consider shorter variations of null checks
+ * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
+ */
+let LevelThangEditView;
+require('app/styles/editor/level/thang/level-thang-edit-view.sass');
+const CocoView = require('views/core/CocoView');
+const template = require('templates/editor/level/thang/level-thang-edit-view');
+const ThangComponentsEditView = require('views/editor/component/ThangComponentsEditView');
+const ThangType = require('models/ThangType');
+const ace = require('lib/aceContainer');
+require('vendor/scripts/jquery-ui-1.11.1.custom');
+require('vendor/styles/jquery-ui-1.11.1.custom.css');
 
-module.exports = class LevelThangEditView extends CocoView
-  ###
-  In the level editor, is the bar at the top when editing a single thang.
-  Everything below is part of the ThangComponentsEditView, which is shared with the
-  ThangType editor view.
-  ###
+module.exports = (LevelThangEditView = (function() {
+  LevelThangEditView = class LevelThangEditView extends CocoView {
+    static initClass() {
+      /*
+      In the level editor, is the bar at the top when editing a single thang.
+      Everything below is part of the ThangComponentsEditView, which is shared with the
+      ThangType editor view.
+      */
+  
+      this.prototype.id = 'level-thang-edit-view';
+      this.prototype.template = template;
+  
+      this.prototype.events = {
+        'click #all-thangs-link': 'navigateToAllThangs',
+        'click #thang-name-link span': 'toggleNameEdit',
+        'click #thang-type-link span': 'toggleTypeEdit',
+        'blur #thang-name-link input': 'toggleNameEdit',
+        'blur #thang-type-link input': 'toggleTypeEdit',
+        'keydown #thang-name-link input': 'toggleNameEditIfReturn',
+        'keydown #thang-type-link input': 'toggleTypeEditIfReturn'
+      };
+    }
 
-  id: 'level-thang-edit-view'
-  template: template
+    constructor(options) {
+      {
+        // Hack: trick Babel/TypeScript into allowing this before super.
+        if (false) { super(); }
+        let thisFn = (() => { return this; }).toString();
+        let thisName = thisFn.match(/return (?:_assertThisInitialized\()*(\w+)\)*;/)[1];
+        eval(`${thisName} = this;`);
+      }
+      this.onComponentsChanged = this.onComponentsChanged.bind(this);
+      this.reportChanges = this.reportChanges.bind(this);
+      if (options == null) { options = {}; }
+      super(options);
+      this.world = options.world;
+      this.thangData = $.extend(true, {}, options.thangData != null ? options.thangData : {});
+      this.level = options.level;
+      this.oldPath = options.oldPath;
+      this.reportChanges = _.debounce(this.reportChanges, 1000);
+    }
 
-  events:
-    'click #all-thangs-link': 'navigateToAllThangs'
-    'click #thang-name-link span': 'toggleNameEdit'
-    'click #thang-type-link span': 'toggleTypeEdit'
-    'blur #thang-name-link input': 'toggleNameEdit'
-    'blur #thang-type-link input': 'toggleTypeEdit'
-    'keydown #thang-name-link input': 'toggleNameEditIfReturn'
-    'keydown #thang-type-link input': 'toggleTypeEditIfReturn'
+    onLoaded() { return this.render(); }
+    afterRender() {
+      let m;
+      super.afterRender();
+      let thangType = this.supermodel.getModelByOriginal(ThangType, this.thangData.thangType);
+      const options = {
+        components: this.thangData.components,
+        supermodel: this.supermodel,
+        level: this.level,
+        world: this.world
+      };
 
-  constructor: (options) ->
-    options ?= {}
-    super options
-    @world = options.world
-    @thangData = $.extend true, {}, options.thangData ? {}
-    @level = options.level
-    @oldPath = options.oldPath
-    @reportChanges = _.debounce @reportChanges, 1000
+      if (this.level.isType('hero', 'hero-ladder', 'hero-coop', 'course', 'course-ladder', 'game-dev', 'web-dev')) { options.thangType = thangType; }
 
-  onLoaded: -> @render()
-  afterRender: ->
-    super()
-    thangType = @supermodel.getModelByOriginal(ThangType, @thangData.thangType)
-    options =
-      components: @thangData.components
-      supermodel: @supermodel
-      level: @level
-      world: @world
+      this.thangComponentEditView = new ThangComponentsEditView(options);
+      this.listenTo(this.thangComponentEditView, 'components-changed', this.onComponentsChanged);
+      this.insertSubView(this.thangComponentEditView);
+      const thangTypeNames = ((() => {
+        const result = [];
+        for (m of Array.from(this.supermodel.getModels(ThangType))) {           result.push(m.get('name'));
+        }
+        return result;
+      })());
+      const input = this.$el.find('#thang-type-link input').autocomplete({source: thangTypeNames, minLength: 0, delay: 0, autoFocus: true});
+      thangType = _.find(this.supermodel.getModels(ThangType), m => m.get('original') === this.thangData.thangType);
+      const thangTypeName = (thangType != null ? thangType.get('name') : undefined) || 'None';
+      input.val(thangTypeName);
+      this.$el.find('#thang-type-link span').text(thangTypeName);
+      return this.hideLoading();
+    }
 
-    if @level.isType('hero', 'hero-ladder', 'hero-coop', 'course', 'course-ladder', 'game-dev', 'web-dev') then options.thangType = thangType
+    navigateToAllThangs() {
+      return Backbone.Mediator.publish('editor:level-thang-done-editing', {thangData: $.extend(true, {}, this.thangData), oldPath: this.oldPath});
+    }
 
-    @thangComponentEditView = new ThangComponentsEditView options
-    @listenTo @thangComponentEditView, 'components-changed', @onComponentsChanged
-    @insertSubView @thangComponentEditView
-    thangTypeNames = (m.get('name') for m in @supermodel.getModels ThangType)
-    input = @$el.find('#thang-type-link input').autocomplete(source: thangTypeNames, minLength: 0, delay: 0, autoFocus: true)
-    thangType = _.find @supermodel.getModels(ThangType), (m) => m.get('original') is @thangData.thangType
-    thangTypeName = thangType?.get('name') or 'None'
-    input.val(thangTypeName)
-    @$el.find('#thang-type-link span').text(thangTypeName)
-    @hideLoading()
+    toggleNameEdit() {
+      const link = this.$el.find('#thang-name-link');
+      const wasEditing = link.find('input:visible').length;
+      const span = link.find('span');
+      const input = link.find('input');
+      if (wasEditing) { span.text(input.val()); } else { input.val(span.text()); }
+      link.find('span, input').toggle();
+      if (!wasEditing) { input.select(); }
+      return this.thangData.id = span.text();
+    }
 
-  navigateToAllThangs: ->
-    Backbone.Mediator.publish 'editor:level-thang-done-editing', {thangData: $.extend(true, {}, @thangData), oldPath: @oldPath}
+    toggleTypeEdit() {
+      const link = this.$el.find('#thang-type-link');
+      const wasEditing = link.find('input:visible').length;
+      const span = link.find('span');
+      const input = link.find('input');
+      if (wasEditing) { span.text(input.val()); }
+      link.find('span, input').toggle();
+      if (!wasEditing) { input.select(); }
+      const thangTypeName = input.val();
+      const thangType = _.find(this.supermodel.getModels(ThangType), m => m.get('name') === thangTypeName);
+      if (thangType && wasEditing) {
+        return this.thangData.thangType = thangType.get('original');
+      }
+    }
 
-  toggleNameEdit: ->
-    link = @$el.find '#thang-name-link'
-    wasEditing = link.find('input:visible').length
-    span = link.find('span')
-    input = link.find('input')
-    if wasEditing then span.text(input.val()) else input.val(span.text())
-    link.find('span, input').toggle()
-    input.select() unless wasEditing
-    @thangData.id = span.text()
+    toggleNameEditIfReturn(e) {
+      if (e.which === 13) { return this.$el.find('#thang-name-link input').blur(); }
+    }
 
-  toggleTypeEdit: ->
-    link = @$el.find '#thang-type-link'
-    wasEditing = link.find('input:visible').length
-    span = link.find('span')
-    input = link.find('input')
-    span.text(input.val()) if wasEditing
-    link.find('span, input').toggle()
-    input.select() unless wasEditing
-    thangTypeName = input.val()
-    thangType = _.find @supermodel.getModels(ThangType), (m) -> m.get('name') is thangTypeName
-    if thangType and wasEditing
-      @thangData.thangType = thangType.get('original')
+    toggleTypeEditIfReturn(e) {
+      if (e.which === 13) { return this.$el.find('#thang-type-link input').blur(); }
+    }
 
-  toggleNameEditIfReturn: (e) ->
-    @$el.find('#thang-name-link input').blur() if e.which is 13
+    onComponentsChanged(components) {
+      this.thangData.components = components;
+      return this.reportChanges();
+    }
 
-  toggleTypeEditIfReturn: (e) ->
-    @$el.find('#thang-type-link input').blur() if e.which is 13
-
-  onComponentsChanged: (components) =>
-    @thangData.components = components
-    @reportChanges()
-
-  reportChanges: =>
-    return if @destroyed
-    Backbone.Mediator.publish 'editor:level-thang-edited', {thangData: $.extend(true, {}, @thangData), oldPath: @oldPath}
+    reportChanges() {
+      if (this.destroyed) { return; }
+      return Backbone.Mediator.publish('editor:level-thang-edited', {thangData: $.extend(true, {}, this.thangData), oldPath: this.oldPath});
+    }
+  };
+  LevelThangEditView.initClass();
+  return LevelThangEditView;
+})());

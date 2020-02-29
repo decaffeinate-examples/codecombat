@@ -1,64 +1,99 @@
-require('app/styles/editor/course/edit.sass')
-RootView = require 'views/core/RootView'
-template = require 'templates/editor/course/edit'
-Course = require 'models/Course'
-ConfirmModal = require 'views/core/ConfirmModal'
-PatchesView = require 'views/editor/PatchesView'
-errors = require 'core/errors'
+/*
+ * decaffeinate suggestions:
+ * DS001: Remove Babel/TypeScript constructor workaround
+ * DS102: Remove unnecessary code created because of implicit returns
+ * DS206: Consider reworking classes to avoid initClass
+ * DS207: Consider shorter variations of null checks
+ * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
+ */
+let CourseEditView;
+require('app/styles/editor/course/edit.sass');
+const RootView = require('views/core/RootView');
+const template = require('templates/editor/course/edit');
+const Course = require('models/Course');
+const ConfirmModal = require('views/core/ConfirmModal');
+const PatchesView = require('views/editor/PatchesView');
+const errors = require('core/errors');
 
-require 'lib/game-libraries'
+require('lib/game-libraries');
 
-module.exports = class CourseEditView extends RootView
-  id: 'editor-course-edit-view'
-  template: template
+module.exports = (CourseEditView = (function() {
+  CourseEditView = class CourseEditView extends RootView {
+    static initClass() {
+      this.prototype.id = 'editor-course-edit-view';
+      this.prototype.template = template;
+  
+      this.prototype.events =
+        {'click #save-button': 'onClickSaveButton'};
+    }
 
-  events:
-    'click #save-button': 'onClickSaveButton'
+    constructor(options, courseID) {
+      {
+        // Hack: trick Babel/TypeScript into allowing this before super.
+        if (false) { super(); }
+        let thisFn = (() => { return this; }).toString();
+        let thisName = thisFn.match(/return (?:_assertThisInitialized\()*(\w+)\)*;/)[1];
+        eval(`${thisName} = this;`);
+      }
+      this.courseID = courseID;
+      super(options);
+      this.course = new Course({_id: this.courseID});
+      this.course.saveBackups = true;
+      this.supermodel.loadModel(this.course);
+    }
 
-  constructor: (options, @courseID) ->
-    super options
-    @course = new Course(_id: @courseID)
-    @course.saveBackups = true
-    @supermodel.loadModel @course
+    onLoaded() {
+      super.onLoaded();
+      this.buildTreema();
+      return this.listenTo(this.course, 'change', () => {
+        this.course.updateI18NCoverage();
+        return this.treema.set('/', this.course.attributes);
+      });
+    }
 
-  onLoaded: ->
-    super()
-    @buildTreema()
-    @listenTo @course, 'change', =>
-      @course.updateI18NCoverage()
-      @treema.set('/', @course.attributes)
+    buildTreema() {
+      if ((this.treema != null) || (!this.course.loaded)) { return; }
+      const data = $.extend(true, {}, this.course.attributes);
+      const options = {
+        data,
+        filePath: `db/course/${this.course.get('_id')}`,
+        schema: Course.schema,
+        readOnly: me.get('anonymous'),
+        supermodel: this.supermodel
+      };
+      this.treema = this.$el.find('#course-treema').treema(options);
+      this.treema.build();
+      return (this.treema.childrenTreemas.rewards != null ? this.treema.childrenTreemas.rewards.open(3) : undefined);
+    }
 
-  buildTreema: ->
-    return if @treema? or (not @course.loaded)
-    data = $.extend(true, {}, @course.attributes)
-    options =
-      data: data
-      filePath: "db/course/#{@course.get('_id')}"
-      schema: Course.schema
-      readOnly: me.get('anonymous')
-      supermodel: @supermodel
-    @treema = @$el.find('#course-treema').treema(options)
-    @treema.build()
-    @treema.childrenTreemas.rewards?.open(3)
+    afterRender() {
+      super.afterRender();
+      if (!this.supermodel.finished()) { return; }
+      if (me.get('anonymous')) { this.showReadOnly(); }
+      this.patchesView = this.insertSubView(new PatchesView(this.course), this.$el.find('.patches-view'));
+      return this.patchesView.load();
+    }
 
-  afterRender: ->
-    super()
-    return unless @supermodel.finished()
-    @showReadOnly() if me.get('anonymous')
-    @patchesView = @insertSubView(new PatchesView(@course), @$el.find('.patches-view'))
-    @patchesView.load()
+    onClickSaveButton(e) {
+      this.treema.endExistingEdits();
+      for (let key in this.treema.data) {
+        const value = this.treema.data[key];
+        this.course.set(key, value);
+      }
+      this.course.updateI18NCoverage();
 
-  onClickSaveButton: (e) ->
-    @treema.endExistingEdits()
-    for key, value of @treema.data
-      @course.set(key, value)
-    @course.updateI18NCoverage()
+      const res = this.course.save();
 
-    res = @course.save()
+      res.error((collection, response, options) => {
+        return console.error(response);
+      });
 
-    res.error (collection, response, options) =>
-      console.error response
-
-    res.success =>
-      url = "/editor/course/#{@course.get('slug') or @course.id}"
-      document.location.href = url
+      return res.success(() => {
+        const url = `/editor/course/${this.course.get('slug') || this.course.id}`;
+        return document.location.href = url;
+      });
+    }
+  };
+  CourseEditView.initClass();
+  return CourseEditView;
+})());

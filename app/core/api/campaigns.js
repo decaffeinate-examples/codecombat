@@ -1,8 +1,18 @@
-fetchJson = require './fetch-json'
+/*
+ * decaffeinate suggestions:
+ * DS102: Remove unnecessary code created because of implicit returns
+ * DS207: Consider shorter variations of null checks
+ * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
+ */
+const fetchJson = require('./fetch-json');
 
 module.exports = {
-  getAll: (options={}) ->
-    fetchJson("/db/campaign", options)
-  get: ({ campaignHandle }, options={}) ->
-    fetchJson("/db/campaign/#{campaignHandle}", options)
-}
+  getAll(options) {
+    if (options == null) { options = {}; }
+    return fetchJson("/db/campaign", options);
+  },
+  get({ campaignHandle }, options) {
+    if (options == null) { options = {}; }
+    return fetchJson(`/db/campaign/${campaignHandle}`, options);
+  }
+};

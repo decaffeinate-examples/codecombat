@@ -1,103 +1,148 @@
-RootView = require 'views/core/RootView'
-NewModelModal = require 'views/editor/modal/NewModelModal'
-template = require 'templates/common/search-view'
-CreateAccountModal = require 'views/core/CreateAccountModal'
+/*
+ * decaffeinate suggestions:
+ * DS001: Remove Babel/TypeScript constructor workaround
+ * DS101: Remove unnecessary use of Array.from
+ * DS102: Remove unnecessary code created because of implicit returns
+ * DS206: Consider reworking classes to avoid initClass
+ * DS207: Consider shorter variations of null checks
+ * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
+ */
+let SearchView;
+const RootView = require('views/core/RootView');
+const NewModelModal = require('views/editor/modal/NewModelModal');
+const template = require('templates/common/search-view');
+const CreateAccountModal = require('views/core/CreateAccountModal');
 
-class SearchCollection extends Backbone.Collection
-  initialize: (modelURL, @model, @term, @projection) ->
-    @url = "#{modelURL}?project="
-    if @projection?.length
-      @url += 'created,permissions'
-      @url += ',' + projected for projected in @projection
-    else @url += 'true'
-    @url += "&term=#{@term}" if @term
+class SearchCollection extends Backbone.Collection {
+  initialize(modelURL, model, term, projection) {
+    this.model = model;
+    this.term = term;
+    this.projection = projection;
+    this.url = `${modelURL}?project=`;
+    if (this.projection != null ? this.projection.length : undefined) {
+      this.url += 'created,permissions';
+      for (let projected of Array.from(this.projection)) { this.url += ',' + projected; }
+    } else { this.url += 'true'; }
+    if (this.term) { return this.url += `&term=${this.term}`; }
+  }
 
-  comparator: (a, b) ->
-    score = 0
-    score -= 9001900190019001 if a.getOwner() is me.id
-    score += 9001900190019001 if b.getOwner() is me.id
-    score -= new Date(a.get 'created')
-    score -= -(new Date(b.get 'created'))
-    if score < 0 then -1 else (if score > 0 then 1 else 0)
+  comparator(a, b) {
+    let score = 0;
+    if (a.getOwner() === me.id) { score -= 9001900190019001; }
+    if (b.getOwner() === me.id) { score += 9001900190019001; }
+    score -= new Date(a.get('created'));
+    score -= -(new Date(b.get('created')));
+    if (score < 0) { return -1; } else { if (score > 0) { return 1; } else { return 0; } }
+  }
+}
 
-module.exports = class SearchView extends RootView
-  template: template
-  className: 'search-view'
+module.exports = (SearchView = (function() {
+  SearchView = class SearchView extends RootView {
+    static initClass() {
+      this.prototype.template = template;
+      this.prototype.className = 'search-view';
+  
+      // to overwrite in subclasses
+      this.prototype.modelLabel = ''; // 'Article'
+      this.prototype.model = null; // Article
+      this.prototype.modelURL = null; // '/db/article'
+      this.prototype.tableTemplate = null; // require 'templates/editor/article/table'
+      this.prototype.projected = null; // ['name', 'description', 'version'] or null for default
+      this.prototype.canMakeNew = true;
+  
+      this.prototype.events = {
+        'change input#search': 'runSearch',
+        'keydown input#search': 'runSearch',
+        'click #new-model-button': 'newModel',
+        'hidden.bs.modal #new-model-modal': 'onModalHidden',
+        'click [data-toggle="coco-modal"][data-target="core/CreateAccountModal"]': 'openCreateAccountModal'
+      };
+    }
 
-  # to overwrite in subclasses
-  modelLabel: '' # 'Article'
-  model: null # Article
-  modelURL: null # '/db/article'
-  tableTemplate: null # require 'templates/editor/article/table'
-  projected: null # ['name', 'description', 'version'] or null for default
-  canMakeNew: true
+    constructor(options) {
+      {
+        // Hack: trick Babel/TypeScript into allowing this before super.
+        if (false) { super(); }
+        let thisFn = (() => { return this; }).toString();
+        let thisName = thisFn.match(/return (?:_assertThisInitialized\()*(\w+)\)*;/)[1];
+        eval(`${thisName} = this;`);
+      }
+      this.runSearch = this.runSearch.bind(this);
+      this.runSearch = _.debounce(this.runSearch, 500);
+      super(options);
+    }
 
-  events:
-    'change input#search': 'runSearch'
-    'keydown input#search': 'runSearch'
-    'click #new-model-button': 'newModel'
-    'hidden.bs.modal #new-model-modal': 'onModalHidden'
-    'click [data-toggle="coco-modal"][data-target="core/CreateAccountModal"]': 'openCreateAccountModal'
+    afterRender() {
+      super.afterRender();
+      const hash = document.location.hash.slice(1);
+      const searchInput = this.$el.find('#search');
+      if (hash != null) { searchInput.val(hash); }
+      if (this.collection != null) {
+        delete this.collection.term;
+      }
+      searchInput.trigger('change');
+      return searchInput.focus();
+    }
 
-  constructor: (options) ->
-    @runSearch = _.debounce(@runSearch, 500)
-    super options
+    runSearch() {
+      if (this.destroyed) { return; }
+      const term = this.$el.find('input#search').val();
+      if (this.sameSearch(term)) { return; }
+      this.removeOldSearch();
 
-  afterRender: ->
-    super()
-    hash = document.location.hash[1..]
-    searchInput = @$el.find('#search')
-    searchInput.val(hash) if hash?
-    delete @collection?.term
-    searchInput.trigger('change')
-    searchInput.focus()
+      this.collection = new SearchCollection(this.modelURL, this.model, term, this.projection);
+      this.collection.term = term; // needed?
+      this.listenTo(this.collection, 'sync', this.onSearchChange);
+      this.showLoading(this.$el.find('.results'));
 
-  runSearch: =>
-    return if @destroyed
-    term = @$el.find('input#search').val()
-    return if @sameSearch(term)
-    @removeOldSearch()
+      this.updateHash(term);
+      return this.collection.fetch();
+    }
 
-    @collection = new SearchCollection(@modelURL, @model, term, @projection)
-    @collection.term = term # needed?
-    @listenTo(@collection, 'sync', @onSearchChange)
-    @showLoading(@$el.find('.results'))
+    updateHash(term) {
+      const newPath = document.location.pathname + (term ? '#' + term : '');
+      const currentPath = document.location.pathname + document.location.hash;
+      if (newPath !== currentPath) { return application.router.navigate(newPath); }
+    }
 
-    @updateHash(term)
-    @collection.fetch()
+    sameSearch(term) {
+      if (!this.collection) { return false; }
+      return term === this.collection.term;
+    }
 
-  updateHash: (term) ->
-    newPath = document.location.pathname + (if term then '#' + term else '')
-    currentPath = document.location.pathname + document.location.hash
-    application.router.navigate(newPath) if newPath isnt currentPath
+    onSearchChange() {
+      this.hideLoading();
+      this.collection.sort();
+      const documents = this.collection.models;
+      const table = $(this.tableTemplate({documents, me, page: this.page, moment}));
+      this.$el.find('table').replaceWith(table);
+      this.$el.find('table').i18n();
+      return this.applyRTLIfNeeded();
+    }
 
-  sameSearch: (term) ->
-    return false unless @collection
-    return term is @collection.term
+    removeOldSearch() {
+      if (this.collection == null) { return; }
+      this.collection.off();
+      return this.collection = null;
+    }
 
-  onSearchChange: ->
-    @hideLoading()
-    @collection.sort()
-    documents = @collection.models
-    table = $(@tableTemplate(documents: documents, me: me, page: @page, moment: moment))
-    @$el.find('table').replaceWith(table)
-    @$el.find('table').i18n()
-    @applyRTLIfNeeded()
+    onNewModelSaved(model) {
+      this.model = model;
+      const base = document.location.pathname.slice(1) + '/';
+      return application.router.navigate(base + (this.model.get('slug') || this.model.id), {trigger: true});
+    }
 
-  removeOldSearch: ->
-    return unless @collection?
-    @collection.off()
-    @collection = null
+    newModel(e) {
+      const modal = new NewModelModal({model: this.model, modelLabel: this.modelLabel});
+      modal.once('model-created', this.onNewModelSaved);
+      return this.openModalView(modal);
+    }
 
-  onNewModelSaved: (@model) ->
-    base = document.location.pathname[1..] + '/'
-    application.router.navigate(base + (@model.get('slug') or @model.id), {trigger: true})
-
-  newModel: (e) ->
-    modal = new NewModelModal model: @model, modelLabel: @modelLabel
-    modal.once 'model-created', @onNewModelSaved
-    @openModalView modal
-
-  openCreateAccountModal: (e) ->
-    e.stopPropagation()
-    @openModalView new CreateAccountModal()
+    openCreateAccountModal(e) {
+      e.stopPropagation();
+      return this.openModalView(new CreateAccountModal());
+    }
+  };
+  SearchView.initClass();
+  return SearchView;
+})());

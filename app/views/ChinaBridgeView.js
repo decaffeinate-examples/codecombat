@@ -1,38 +1,72 @@
-require('app/styles/china-bridge.sass')
-RootView = require 'views/core/RootView'
-template = require 'templates/china-bridge-view'
-utils = require 'core/utils'
-storage = require 'core/storage'
+/*
+ * decaffeinate suggestions:
+ * DS001: Remove Babel/TypeScript constructor workaround
+ * DS102: Remove unnecessary code created because of implicit returns
+ * DS206: Consider reworking classes to avoid initClass
+ * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
+ */
+let ContactGEEKView;
+require('app/styles/china-bridge.sass');
+const RootView = require('views/core/RootView');
+const template = require('templates/china-bridge-view');
+const utils = require('core/utils');
+const storage = require('core/storage');
 
 
-module.exports = class ContactGEEKView extends RootView
-  id: 'contact-geek-view'
-  template: template
+module.exports = (ContactGEEKView = (function() {
+  ContactGEEKView = class ContactGEEKView extends RootView {
+    constructor(...args) {
+      {
+        // Hack: trick Babel/TypeScript into allowing this before super.
+        if (false) { super(); }
+        let thisFn = (() => { return this; }).toString();
+        let thisName = thisFn.match(/return (?:_assertThisInitialized\()*(\w+)\)*;/)[1];
+        eval(`${thisName} = this;`);
+      }
+      this.goRedirect = this.goRedirect.bind(this);
+      super(...args);
+    }
 
-  events:
-    'click .one': 'onClickOne'
-    'click .two': 'onClickTwo'
+    static initClass() {
+      this.prototype.id = 'contact-geek-view';
+      this.prototype.template = template;
+  
+      this.prototype.events = {
+        'click .one': 'onClickOne',
+        'click .two': 'onClickTwo'
+      };
+    }
 
-  initialize: (options) ->
-    super(options)
-    @history = @getRedirect()
-    if @history
-      setTimeout @goRedirect, 5000
+    initialize(options) {
+      super.initialize(options);
+      this.history = this.getRedirect();
+      if (this.history) {
+        return setTimeout(this.goRedirect, 5000);
+      }
+    }
 
-  goRedirect: (value) =>
-    redirectURL = utils.getQueryVariable 'redirect'
-    url = if (value or @history) == 'koudashijie' then 'https://koudashijie.com' else 'https://codecombat.163.com'
-    if redirectURL
-      url += redirectURL
-    window.location.href = url
+    goRedirect(value) {
+      const redirectURL = utils.getQueryVariable('redirect');
+      let url = (value || this.history) === 'koudashijie' ? 'https://koudashijie.com' : 'https://codecombat.163.com';
+      if (redirectURL) {
+        url += redirectURL;
+      }
+      return window.location.href = url;
+    }
 
-  setRedirect: (redirect) -> storage.save('redirect', redirect)
-  getRedirect: -> storage.load('redirect')
+    setRedirect(redirect) { return storage.save('redirect', redirect); }
+    getRedirect() { return storage.load('redirect'); }
 
-  onClickOne: (e) ->
-    @setRedirect("koudashijie");
-    @goRedirect("koudashijie")
+    onClickOne(e) {
+      this.setRedirect("koudashijie");
+      return this.goRedirect("koudashijie");
+    }
 
-  onClickTwo: (e) ->
-    @setRedirect("netease");
-    @goRedirect("netease")
+    onClickTwo(e) {
+      this.setRedirect("netease");
+      return this.goRedirect("netease");
+    }
+  };
+  ContactGEEKView.initClass();
+  return ContactGEEKView;
+})());

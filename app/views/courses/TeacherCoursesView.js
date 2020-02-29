@@ -1,128 +1,177 @@
-require('app/styles/courses/teacher-courses-view.sass')
-CocoCollection = require 'collections/CocoCollection'
-CocoModel = require 'models/CocoModel'
-Courses = require 'collections/Courses'
-Campaigns = require 'collections/Campaigns'
-Classroom = require 'models/Classroom'
-Classrooms = require 'collections/Classrooms'
-User = require 'models/User'
-CourseInstance = require 'models/CourseInstance'
-Prepaids = require 'collections/Prepaids'
-RootView = require 'views/core/RootView'
-template = require 'templates/courses/teacher-courses-view'
-HeroSelectModal = require 'views/courses/HeroSelectModal'
-utils = require 'core/utils'
-api = require 'core/api'
+/*
+ * decaffeinate suggestions:
+ * DS102: Remove unnecessary code created because of implicit returns
+ * DS103: Rewrite code to no longer use __guard__
+ * DS104: Avoid inline assignments
+ * DS204: Change includes calls to have a more natural evaluation order
+ * DS206: Consider reworking classes to avoid initClass
+ * DS207: Consider shorter variations of null checks
+ * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
+ */
+let TeacherCoursesView;
+require('app/styles/courses/teacher-courses-view.sass');
+const CocoCollection = require('collections/CocoCollection');
+const CocoModel = require('models/CocoModel');
+const Courses = require('collections/Courses');
+const Campaigns = require('collections/Campaigns');
+const Classroom = require('models/Classroom');
+const Classrooms = require('collections/Classrooms');
+const User = require('models/User');
+const CourseInstance = require('models/CourseInstance');
+const Prepaids = require('collections/Prepaids');
+const RootView = require('views/core/RootView');
+const template = require('templates/courses/teacher-courses-view');
+const HeroSelectModal = require('views/courses/HeroSelectModal');
+const utils = require('core/utils');
+const api = require('core/api');
 
-module.exports = class TeacherCoursesView extends RootView
-  id: 'teacher-courses-view'
-  template: template
+module.exports = (TeacherCoursesView = (function() {
+  TeacherCoursesView = class TeacherCoursesView extends RootView {
+    static initClass() {
+      this.prototype.id = 'teacher-courses-view';
+      this.prototype.template = template;
+  
+      this.prototype.events = {
+        'click .guide-btn': 'onClickGuideButton',
+        'click .play-level-button': 'onClickPlayLevel',
+        'click .show-change-log': 'onClickShowChange',
+        'click .video-thumbnail': 'onClickVideoThumbnail'
+      };
+    }
 
-  events:
-    'click .guide-btn': 'onClickGuideButton'
-    'click .play-level-button': 'onClickPlayLevel'
-    'click .show-change-log': 'onClickShowChange'
-    'click .video-thumbnail': 'onClickVideoThumbnail'
+    getTitle() { return $.i18n.t('teacher.courses'); }
 
-  getTitle: -> return $.i18n.t('teacher.courses')
+    initialize(options) {
+      super.initialize(options);
+      application.setHocCampaign(''); // teachers playing levels from here return here
+      this.utils = require('core/utils');
+      this.enableCpp = me.enableCpp();
+      this.ownedClassrooms = new Classrooms();
+      this.ownedClassrooms.fetchMine({data: {project: '_id'}});
+      this.supermodel.trackCollection(this.ownedClassrooms);
+      this.courses = new Courses();
+      this.prepaids = new Prepaids();
+      this.paidTeacher = me.isAdmin() || me.isPaidTeacher();
+      if (me.isAdmin()) {
+        this.supermodel.trackRequest(this.courses.fetch());
+      } else {
+        this.supermodel.trackRequest(this.courses.fetchReleased());
+        this.supermodel.trackRequest(this.prepaids.fetchMineAndShared());
+      }
+      this.campaigns = new Campaigns([], { forceCourseNumbering: true });
+      this.supermodel.trackRequest(this.campaigns.fetchByType('course', { data: { project: 'levels,levelsUpdated' } }));
+      this.campaignLevelNumberMap = {};
+      this.courseChangeLog = {};
+      this.videoLevels = utils.videoLevels || {};
+      return (window.tracker != null ? window.tracker.trackEvent('Classes Guides Loaded', {category: 'Teachers'}, ['Mixpanel']) : undefined);
+    }
 
-  initialize: (options) ->
-    super(options)
-    application.setHocCampaign('') # teachers playing levels from here return here
-    @utils = require 'core/utils'
-    @enableCpp = me.enableCpp()
-    @ownedClassrooms = new Classrooms()
-    @ownedClassrooms.fetchMine({data: {project: '_id'}})
-    @supermodel.trackCollection(@ownedClassrooms)
-    @courses = new Courses()
-    @prepaids = new Prepaids()
-    @paidTeacher = me.isAdmin() or me.isPaidTeacher()
-    if me.isAdmin()
-      @supermodel.trackRequest @courses.fetch()
-    else
-      @supermodel.trackRequest @courses.fetchReleased()
-      @supermodel.trackRequest @prepaids.fetchMineAndShared()
-    @campaigns = new Campaigns([], { forceCourseNumbering: true })
-    @supermodel.trackRequest @campaigns.fetchByType('course', { data: { project: 'levels,levelsUpdated' } })
-    @campaignLevelNumberMap = {}
-    @courseChangeLog = {}
-    @videoLevels = utils.videoLevels || {}
-    window.tracker?.trackEvent 'Classes Guides Loaded', category: 'Teachers', ['Mixpanel']
+    onLoaded() {
+      let needle;
+      this.campaigns.models.forEach(campaign => {
+        const levels = campaign.getLevels().models.map(level => {
+          let left, left1;
+          return {key: level.get('original'), practice: (left = level.get('practice')) != null ? left : false, assessment: (left1 = level.get('assessment')) != null ? left1 : false};
+        });
+        return this.campaignLevelNumberMap[campaign.id] = utils.createLevelNumberMap(levels);
+      });
+      this.paidTeacher = this.paidTeacher || (this.prepaids.find(p => (needle = p.get('type'), ['course', 'starter_license'].includes(needle)) && (p.get('maxRedeemers') > 0)) != null);
+      this.fetchChangeLog();
+      __guard__(me.getClientCreatorPermissions(), x => x.then(() => (typeof this.render === 'function' ? this.render() : undefined)));
+      return (typeof this.render === 'function' ? this.render() : undefined);
+    }
 
-  onLoaded: ->
-    @campaigns.models.forEach (campaign) =>
-      levels = campaign.getLevels().models.map (level) =>
-        key: level.get('original'), practice: level.get('practice') ? false, assessment: level.get('assessment') ? false
-      @campaignLevelNumberMap[campaign.id] = utils.createLevelNumberMap(levels)
-    @paidTeacher = @paidTeacher or @prepaids.find((p) => p.get('type') in ['course', 'starter_license'] and p.get('maxRedeemers') > 0)?
-    @fetchChangeLog()
-    me.getClientCreatorPermissions()?.then(() => @render?())
-    @render?()
+    fetchChangeLog() {
+      return api.courses.fetchChangeLog().then(changeLogInfo => {
+        this.courses.models.forEach(course => {
+          let changeLog = _.filter(changeLogInfo, { 'id' : course.get('_id') });
+          changeLog = _.sortBy(changeLog, 'date');
+          return this.courseChangeLog[course.id] = _.mapValues(_.groupBy(changeLog, 'date'));
+        });
+        return (typeof this.render === 'function' ? this.render() : undefined);  
+      })
+      .catch(e => {
+        return console.error(e);
+      });
+    }
 
-  fetchChangeLog: ->
-    api.courses.fetchChangeLog().then((changeLogInfo) =>
-      @courses.models.forEach (course) =>
-        changeLog = _.filter(changeLogInfo, { 'id' : course.get('_id') })
-        changeLog = _.sortBy(changeLog, 'date')
-        @courseChangeLog[course.id] = _.mapValues(_.groupBy(changeLog, 'date'))
-      @render?()  
-    )
-    .catch((e) =>
-      console.error(e)
-    )
+    onClickGuideButton(e) {
+      const courseID = $(e.currentTarget).data('course-id');
+      const courseName = $(e.currentTarget).data('course-name');
+      const eventAction = $(e.currentTarget).data('event-action');
+      return window.tracker != null ? window.tracker.trackEvent(eventAction, {category: 'Teachers', courseID, courseName}, ['Mixpanel']) : undefined;
+    }
 
-  onClickGuideButton: (e) ->
-    courseID = $(e.currentTarget).data('course-id')
-    courseName = $(e.currentTarget).data('course-name')
-    eventAction = $(e.currentTarget).data('event-action')
-    window.tracker?.trackEvent eventAction, category: 'Teachers', courseID: courseID, courseName: courseName, ['Mixpanel']
+    onClickPlayLevel(e) {
+      const form = $(e.currentTarget).closest('.play-level-form');
+      const levelSlug = form.find('.level-select').val();
+      const courseID = form.data('course-id');
+      const language = form.find('.language-select').val() || 'javascript';
+      if (window.tracker != null) {
+        window.tracker.trackEvent('Classes Guides Play Level', {category: 'Teachers', courseID, language, levelSlug}, ['Mixpanel']);
+      }
+      const url = `/play/level/${levelSlug}?course=${courseID}&codeLanguage=${language}`;
+      const firstLevelSlug = this.campaigns.get(this.courses.at(0).get('campaignID')).getLevels().at(0).get('slug');
+      if (levelSlug === firstLevelSlug) {
+        return this.listenToOnce(this.openModalView(new HeroSelectModal()), {
+          'hidden'() {
+            return application.router.navigate(url, { trigger: true });
+          }
+        }
+        );
+      } else {
+        return application.router.navigate(url, { trigger: true });
+      }
+    }
 
-  onClickPlayLevel: (e) ->
-    form = $(e.currentTarget).closest('.play-level-form')
-    levelSlug = form.find('.level-select').val()
-    courseID = form.data('course-id')
-    language = form.find('.language-select').val() or 'javascript'
-    window.tracker?.trackEvent 'Classes Guides Play Level', category: 'Teachers', courseID: courseID, language: language, levelSlug: levelSlug, ['Mixpanel']
-    url = "/play/level/#{levelSlug}?course=#{courseID}&codeLanguage=#{language}"
-    firstLevelSlug = @campaigns.get(@courses.at(0).get('campaignID')).getLevels().at(0).get('slug')
-    if levelSlug is firstLevelSlug
-      @listenToOnce @openModalView(new HeroSelectModal()),
-        'hidden': ->
-          application.router.navigate(url, { trigger: true })
-    else
-      application.router.navigate(url, { trigger: true })
+    onClickShowChange(e) {
+      const showChangeLog = $(e.currentTarget);
+      const changeLogDiv = showChangeLog.closest('.course-change-log');
+      const changeLogText = changeLogDiv.find('.change-log');
+      if (changeLogText.hasClass('hidden')) {
+        changeLogText.removeClass('hidden');
+        return showChangeLog.text($.i18n.t('courses.hide_change_log'));
+      } else {
+        changeLogText.addClass('hidden');
+        return showChangeLog.text($.i18n.t('courses.show_change_log'));
+      }
+    }
 
-  onClickShowChange: (e) ->
-    showChangeLog = $(e.currentTarget)
-    changeLogDiv = showChangeLog.closest('.course-change-log')
-    changeLogText = changeLogDiv.find('.change-log')
-    if changeLogText.hasClass('hidden')
-      changeLogText.removeClass('hidden')
-      showChangeLog.text($.i18n.t('courses.hide_change_log'))
-    else
-      changeLogText.addClass('hidden')
-      showChangeLog.text($.i18n.t('courses.show_change_log'))
+    onClickVideoThumbnail(e) {
+      this.$('#video-modal').modal('show');
+      const image_src = e.target.src.slice(e.target.src.search('/images'));
+      const video = (Object.values(this.videoLevels || {}).find(l => l.thumbnail_unlocked === image_src) || {});
+      this.$('.video-player')[0].src = me.showChinaVideo() ? video.cn_url : video.url;
 
-  onClickVideoThumbnail: (e) ->
-    @$('#video-modal').modal('show')
-    image_src = e.target.src.slice(e.target.src.search('/images'))
-    video = (Object.values(@videoLevels || {}).find((l) => l.thumbnail_unlocked == image_src) || {})
-    @$('.video-player')[0].src = if me.showChinaVideo() then video.cn_url else video.url
+      if (!me.showChinaVideo()) {
+        require.ensure(['@vimeo/player'], require => {
+          const VideoPlayer = require('@vimeo/player').default;
+          this.videoPlayer = new VideoPlayer(this.$('.video-player')[0]);
+          return this.videoPlayer.play().catch(err => console.error("Error while playing the video:", err));
+        }
+        , e => {
+          return console.error(e);
+        }
+        , 'vimeo');
+      }
+      return this.$('#video-modal').on(('hide.bs.modal'), e=> {
+        if (me.showChinaVideo()) {
+          return this.$('.video-player').attr('src', '');
+        } else {
+          return (this.videoPlayer != null ? this.videoPlayer.pause() : undefined);
+        }
+      });
+    }
 
-    if !me.showChinaVideo()
-      require.ensure(['@vimeo/player'], (require) =>
-        VideoPlayer = require('@vimeo/player').default
-        @videoPlayer = new VideoPlayer(@$('.video-player')[0])
-        @videoPlayer.play().catch((err) => console.error("Error while playing the video:", err))
-      , (e) =>
-        console.error e
-      , 'vimeo')
-    @$('#video-modal').on ('hide.bs.modal'), (e)=>
-      if me.showChinaVideo()
-        @$('.video-player').attr('src', '');
-      else
-        @videoPlayer?.pause()
+    destroy() {
+      this.$('#video-modal').modal('hide');
+      return super.destroy();
+    }
+  };
+  TeacherCoursesView.initClass();
+  return TeacherCoursesView;
+})());
 
-  destroy: ->
-    @$('#video-modal').modal('hide')
-    super()
+function __guard__(value, transform) {
+  return (typeof value !== 'undefined' && value !== null) ? transform(value) : undefined;
+}

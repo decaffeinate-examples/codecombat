@@ -1,19 +1,36 @@
-ModalView = require 'views/core/ModalView'
-State = require 'models/State'
-template = require 'templates/courses/courses-not-assigned-modal'
+/*
+ * decaffeinate suggestions:
+ * DS101: Remove unnecessary use of Array.from
+ * DS102: Remove unnecessary code created because of implicit returns
+ * DS206: Consider reworking classes to avoid initClass
+ * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
+ */
+let CoursesNotAssignedModal;
+const ModalView = require('views/core/ModalView');
+const State = require('models/State');
+const template = require('templates/courses/courses-not-assigned-modal');
 
-{ STARTER_LICENSE_COURSE_IDS } = require 'core/constants'
+const { STARTER_LICENSE_COURSE_IDS } = require('core/constants');
 
-module.exports = class CoursesNotAssignedModal extends ModalView
-  id: 'courses-not-assigned-modal'
-  template: template
+module.exports = (CoursesNotAssignedModal = (function() {
+  CoursesNotAssignedModal = class CoursesNotAssignedModal extends ModalView {
+    static initClass() {
+      this.prototype.id = 'courses-not-assigned-modal';
+      this.prototype.template = template;
+    }
 
-  initialize: (options) ->
-    @i18nData = _.pick(options, ['selected', 'numStudentsWithoutFullLicenses', 'numFullLicensesAvailable'])
-    @state = new State({
-      promoteStarterLicenses: false
-    })
-    if options.courseID in STARTER_LICENSE_COURSE_IDS
-      @supermodel.trackRequest(me.getLeadPriority())
-        .then(({ priority }) => @state.set({ promoteStarterLicenses: (priority is 'low') and (me.get('preferredLanguage') isnt 'nl-BE')}))
-    @listenTo @state, 'change', @render
+    initialize(options) {
+      this.i18nData = _.pick(options, ['selected', 'numStudentsWithoutFullLicenses', 'numFullLicensesAvailable']);
+      this.state = new State({
+        promoteStarterLicenses: false
+      });
+      if (Array.from(STARTER_LICENSE_COURSE_IDS).includes(options.courseID)) {
+        this.supermodel.trackRequest(me.getLeadPriority())
+          .then(({ priority }) => this.state.set({ promoteStarterLicenses: (priority === 'low') && (me.get('preferredLanguage') !== 'nl-BE')}));
+      }
+      return this.listenTo(this.state, 'change', this.render);
+    }
+  };
+  CoursesNotAssignedModal.initClass();
+  return CoursesNotAssignedModal;
+})());

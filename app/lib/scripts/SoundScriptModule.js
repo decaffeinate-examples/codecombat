@@ -1,34 +1,49 @@
-ScriptModule = require './ScriptModule'
+/*
+ * decaffeinate suggestions:
+ * DS207: Consider shorter variations of null checks
+ * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
+ */
+let SoundScriptModule;
+const ScriptModule = require('./ScriptModule');
 
-currentMusic = null
-standingBy = null
+const currentMusic = null;
+const standingBy = null;
 
-{me} = require('core/auth')
+const {me} = require('core/auth');
 
-module.exports = class SoundScriptModule extends ScriptModule
-  @neededFor: (noteGroup) ->
-    return noteGroup.sound?
+module.exports = (SoundScriptModule = class SoundScriptModule extends ScriptModule {
+  static neededFor(noteGroup) {
+    return (noteGroup.sound != null);
+  }
 
-  startNotes: ->
-    notes = []
-    notes.push(@addSuppressSelectionSoundsNote()) if @noteGroup.sound.suppressSelectionSounds?
-    notes.push(@addMusicNote()) if @noteGroup.sound.music?
-    return notes
+  startNotes() {
+    const notes = [];
+    if (this.noteGroup.sound.suppressSelectionSounds != null) { notes.push(this.addSuppressSelectionSoundsNote()); }
+    if (this.noteGroup.sound.music != null) { notes.push(this.addMusicNote()); }
+    return notes;
+  }
 
-  endNotes: ->
-    return []
+  endNotes() {
+    return [];
+  }
 
-  skipNotes: ->
-    return @startNotes()
+  skipNotes() {
+    return this.startNotes();
+  }
 
-  addSuppressSelectionSoundsNote: ->
-    note =
-      channel: 'level:suppress-selection-sounds'
-      event: {suppress: @noteGroup.sound.suppressSelectionSounds}
-    return note
+  addSuppressSelectionSoundsNote() {
+    const note = {
+      channel: 'level:suppress-selection-sounds',
+      event: {suppress: this.noteGroup.sound.suppressSelectionSounds}
+    };
+    return note;
+  }
 
-  addMusicNote: ->
-    note =
-      channel: 'music-player:play-music'
-      event: @noteGroup.sound.music
-    return note
+  addMusicNote() {
+    const note = {
+      channel: 'music-player:play-music',
+      event: this.noteGroup.sound.music
+    };
+    return note;
+  }
+});
