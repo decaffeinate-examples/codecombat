@@ -58,7 +58,7 @@ const PromotionModal = require('views/play/modal/PromotionModal');
 require('vendor/scripts/jquery-ui-1.11.1.custom');
 require('vendor/styles/jquery-ui-1.11.1.custom.css');
 const fetchJson = require('core/api/fetch-json');
-const HoCModal = require('views/special_event/HoC2018InterstitialModal.coffee');
+const HoCModal = require("views/special_event/HoC2018InterstitialModal");
 const CourseVideosModal = require('views/play/level/modal/CourseVideosModal');
 
 require('lib/game-libraries');

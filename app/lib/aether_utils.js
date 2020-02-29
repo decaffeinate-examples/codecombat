@@ -6,7 +6,7 @@
  * DS207: Consider shorter variations of null checks
  * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
  */
-require('./aether/aether.coffee');
+require("./aether/aether");
 // require 'esper.js' # TODO Webpack: Get Esper out of the frontpage script
 
 const utils = require('core/utils');
